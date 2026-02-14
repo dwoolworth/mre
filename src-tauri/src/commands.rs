@@ -218,7 +218,14 @@ pub fn export_pdf(source_path: String, output_path: String, font_size: f64) -> R
 
 #[tauri::command]
 pub fn open_path(path: String) -> Result<(), String> {
-    std::process::Command::new("open")
+    #[cfg(target_os = "macos")]
+    let cmd = "open";
+    #[cfg(target_os = "linux")]
+    let cmd = "xdg-open";
+    #[cfg(target_os = "windows")]
+    let cmd = "explorer";
+
+    std::process::Command::new(cmd)
         .arg(&path)
         .spawn()
         .map_err(|e| format!("Failed to open: {}", e))?;

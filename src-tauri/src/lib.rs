@@ -166,12 +166,13 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building MRE")
-        .run(|app, event| {
-            if let tauri::RunEvent::Opened { urls } = event {
+        .run(|_app, _event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = _event {
                 for url in urls {
                     if let Ok(path) = url.to_file_path() {
                         if path.exists() {
-                            let _ = app.emit("open-file", path.to_string_lossy().to_string());
+                            let _ = _app.emit("open-file", path.to_string_lossy().to_string());
                         }
                     }
                 }
