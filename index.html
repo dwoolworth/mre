@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MRE</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <script type="module" src="/src/main.js" defer></script>
+  </head>
+  <body>
+    <!-- Toolbar -->
+    <div id="toolbar">
+      <div id="toolbar-left">
+        <button id="btn-toggle-sidebar" class="toolbar-btn" title="Toggle sidebar">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25V2.75zM2.75 2.5a.25.25 0 00-.25.25v10.5c0 .138.112.25.25.25H5.5V2.5H2.75zM7 2.5v11h6.25a.25.25 0 00.25-.25V2.75a.25.25 0 00-.25-.25H7z"/>
+          </svg>
+        </button>
+        <span id="toolbar-title">Markdown Read &amp; Edit</span>
+      </div>
+      <div id="toolbar-right">
+        <button id="btn-edit" class="toolbar-btn" title="Edit document" style="display: none;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M11.013 1.427a1.75 1.75 0 012.474 0l1.086 1.086a1.75 1.75 0 010 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 01-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61zM12.259 2.8a.25.25 0 00-.354 0L10.78 3.926l1.293 1.293 1.126-1.126a.25.25 0 000-.354L12.26 2.8zM3.28 12.72l6.44-6.44-1.293-1.293-6.44 6.44a.25.25 0 00-.065.108l-.63 2.206 2.206-.63a.25.25 0 00.108-.065z"/>
+          </svg>
+        </button>
+        <button id="btn-save" class="toolbar-btn" title="Save (Cmd+S)" style="display: none;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M1 2.75C1 1.784 1.784 1 2.75 1h7.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237V13.25A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25V2.75zm10.5 9.5V9H4.5v3.25h7zm1.5 0V5.664L10.836 3.5H10.5V6h-7V3.5H2.75a.25.25 0 00-.25.25v9.5c0 .138.112.25.25.25H4V8.75A.75.75 0 014.75 8h6.5a.75.75 0 01.75.75v3.5h1.25a.25.25 0 00.25-.25zM8 2v3h1V2H8z"/>
+          </svg>
+        </button>
+        <button id="btn-export-pdf" class="toolbar-btn" title="Export to PDF (Cmd+E)" style="display: none;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75z"/>
+            <path d="M7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.969a.749.749 0 111.06 1.06l-3.25 3.25a.749.749 0 01-1.06 0L4.22 6.78a.749.749 0 111.06-1.06l1.97 1.969z"/>
+          </svg>
+        </button>
+        <button id="btn-font-down" class="toolbar-btn" title="Decrease font size">-</button>
+        <span id="font-size-display">16</span>
+        <button id="btn-font-up" class="toolbar-btn" title="Increase font size">+</button>
+        <button id="btn-settings" class="toolbar-btn" title="Settings">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path fill-rule="evenodd" d="M7.429 1.525a6.593 6.593 0 011.142 0c.036.003.108.036.137.146l.289 1.105c.147.56.55.967.997 1.189.174.086.341.183.501.29.417.278.97.423 1.53.27l1.102-.303c.11-.03.175.016.195.046.219.31.41.641.573.989.014.031.022.11-.059.19l-.815.806c-.411.406-.562.957-.53 1.456a4.588 4.588 0 010 .582c-.032.499.119 1.05.53 1.456l.815.806c.08.08.073.159.059.19a6.494 6.494 0 01-.573.99c-.02.029-.086.074-.195.045l-1.103-.303c-.559-.153-1.112-.008-1.529.27-.16.107-.327.204-.5.29-.449.222-.851.628-.998 1.189l-.289 1.105c-.029.11-.101.143-.137.146a6.613 6.613 0 01-1.142 0c-.036-.003-.108-.037-.137-.146l-.289-1.105c-.147-.56-.55-.967-.997-1.189a4.502 4.502 0 01-.501-.29c-.417-.278-.97-.423-1.53-.27l-1.102.303c-.11.03-.175-.016-.195-.046a6.492 6.492 0 01-.573-.989c-.014-.031-.022-.11.059-.19l.815-.806c.411-.406.562-.957.53-1.456a4.587 4.587 0 010-.582c.032-.499-.119-1.05-.53-1.456l-.815-.806c-.08-.08-.073-.159-.059-.19a6.44 6.44 0 01.573-.99c.02-.029.086-.074.195-.045l1.103.303c.559.153 1.112.008 1.529-.27.16-.107.327-.204.5-.29.449-.222.851-.628.998-1.189l.289-1.105c.029-.11.101-.143.137-.146zM8 0c-.236 0-.47.01-.701.03-.743.065-1.29.615-1.458 1.261l-.29 1.106c-.017.066-.078.158-.211.224a5.994 5.994 0 00-.668.386c-.123.082-.233.117-.3.1L3.27 2.801c-.635-.175-1.322.017-1.715.648a7.993 7.993 0 00-.746 1.292c-.268.594-.1 1.29.34 1.724l.816.806c.049.048.098.147.088.294a6.084 6.084 0 000 .772c.01.147-.04.246-.088.294l-.816.806c-.44.434-.608 1.13-.34 1.724.226.5.484.98.746 1.292.393.63 1.08.823 1.715.648l1.103-.303c.066-.018.177.018.3.1.22.152.448.29.668.386.133.066.194.158.212.224l.289 1.106c.169.646.715 1.196 1.458 1.26a8.094 8.094 0 001.402 0c.743-.064 1.29-.614 1.458-1.26l.29-1.106c.017-.066.078-.158.211-.224a5.98 5.98 0 00.668-.386c.123-.082.233-.117.3-.1l1.102.302c.635.176 1.322-.017 1.715-.648.262-.312.52-.792.746-1.292.268-.594.1-1.29-.34-1.724l-.816-.806c-.048-.048-.098-.147-.088-.294a6.1 6.1 0 000-.772c-.01-.147.04-.246.088-.294l.816-.806c.44-.434.608-1.13.34-1.724a7.986 7.986 0 00-.746-1.292c-.393-.631-1.08-.823-1.715-.648l-1.103.303c-.066.018-.177-.018-.3-.1a5.98 5.98 0 00-.668-.386c-.133-.066-.194-.158-.212-.224L9.16 1.29C8.99.645 8.444.095 7.701.031A8.094 8.094 0 008 0zm-.571 7.429a.571.571 0 111.143 0 .571.571 0 01-1.143 0zM8 5.143a2.857 2.857 0 100 5.714 2.857 2.857 0 000-5.714z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div id="app-container">
+      <!-- Sidebar -->
+      <div id="sidebar">
+        <div id="sidebar-header">
+          <div id="filter-container">
+            <svg class="filter-icon" width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M10.68 11.74a6 6 0 01-7.922-8.982 6 6 0 018.982 7.922l3.04 3.04a.749.749 0 01-.326 1.275.749.749 0 01-.734-.215l-3.04-3.04zM11.5 7a4.499 4.499 0 10-8.997 0A4.499 4.499 0 0011.5 7z"/>
+            </svg>
+            <input type="text" id="filter-input" placeholder="Filter files..." />
+            <button id="btn-favorites-filter" class="filter-btn" title="Show favorites only">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.751.751 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div id="sidebar-actions">
+          <button id="btn-open-folder" class="sidebar-action-btn">Open Folder</button>
+          <button id="btn-open-file" class="sidebar-action-btn">Open File</button>
+        </div>
+        <div id="file-tree"></div>
+      </div>
+
+      <!-- Resize handle -->
+      <div id="resize-handle"></div>
+
+      <!-- Content area -->
+      <div id="content-area">
+        <div id="empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <polyline points="14,2 14,8 20,8"/>
+          </svg>
+          <p>Select a markdown file</p>
+        </div>
+        <div id="content" class="markdown-body" style="display: none;"></div>
+        <textarea id="editor" style="display: none;"></textarea>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-overlay" style="display: none;">
+      <div id="settings-modal">
+        <div id="settings-header">
+          <h2>Settings</h2>
+          <button id="btn-close-settings" class="toolbar-btn">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.749.749 0 011.275.326.749.749 0 01-.215.734L9.06 8l3.22 3.22a.749.749 0 01-.326 1.275.749.749 0 01-.734-.215L8 9.06l-3.22 3.22a.751.751 0 01-1.042-.018.751.751 0 01-.018-1.042L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/>
+            </svg>
+          </button>
+        </div>
+        <div id="settings-body">
+          <!-- Color Scheme -->
+          <div class="setting-row bordered">
+            <span class="setting-row-label">Color Scheme</span>
+            <div class="segmented-control" id="seg-color-scheme">
+              <button class="seg-btn" data-value="system">System</button>
+              <button class="seg-btn" data-value="light">Light</button>
+              <button class="seg-btn active" data-value="dark">Dark</button>
+            </div>
+          </div>
+
+          <!-- Theme -->
+          <div class="setting-row bordered">
+            <span class="setting-row-label">Theme</span>
+            <select id="setting-theme-name">
+              <option value="github">GitHub</option>
+              <option value="solarized">Solarized</option>
+              <option value="one-dark">One Dark</option>
+              <option value="dracula">Dracula</option>
+              <option value="monokai">Monokai</option>
+              <option value="nord">Nord</option>
+            </select>
+          </div>
+
+          <!-- Font Size -->
+          <div class="setting-row bordered">
+            <span class="setting-row-label">Font Size</span>
+            <div class="slider-group">
+              <span id="setting-font-value" class="slider-value">16 pt</span>
+              <input type="range" id="setting-font-slider" min="6" max="28" value="16" step="1" />
+            </div>
+          </div>
+
+          <!-- Font Family -->
+          <div class="setting-row bordered">
+            <span class="setting-row-label">Font Family</span>
+            <select id="setting-font-family">
+              <option value="system">System Default</option>
+              <option value="serif">Serif</option>
+              <option value="mono">Monospaced</option>
+            </select>
+          </div>
+
+          <!-- Heading Scale -->
+          <div class="setting-row bordered">
+            <span class="setting-row-label">Heading Scale</span>
+            <div class="segmented-control" id="seg-heading-scale">
+              <button class="seg-btn" data-value="compact">Compact</button>
+              <button class="seg-btn active" data-value="normal">Normal</button>
+              <button class="seg-btn" data-value="spacious">Spacious</button>
+            </div>
+          </div>
+
+          <!-- Content Width -->
+          <div class="setting-row bordered">
+            <span class="setting-row-label">Content Width</span>
+            <select id="setting-content-width">
+              <option value="narrow">Narrow</option>
+              <option value="medium" selected>Medium</option>
+              <option value="wide">Wide</option>
+              <option value="full">Full</option>
+            </select>
+          </div>
+
+          <!-- Show Line Numbers -->
+          <div class="setting-row bordered">
+            <span class="setting-row-label">Show Line Numbers</span>
+            <label class="toggle">
+              <input type="checkbox" id="setting-line-numbers" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <!-- Colors Section -->
+          <div class="setting-section-label">Colors</div>
+
+          <div class="setting-row bordered">
+            <span class="setting-row-label">Heading Color</span>
+            <div class="color-input-group">
+              <input type="color" id="setting-heading-color" />
+              <button class="reset-btn" data-target="heading-color" title="Reset to theme default">Reset</button>
+            </div>
+          </div>
+
+          <div class="setting-row bordered">
+            <span class="setting-row-label">Paragraph Color</span>
+            <div class="color-input-group">
+              <input type="color" id="setting-paragraph-color" />
+              <button class="reset-btn" data-target="paragraph-color" title="Reset to theme default">Reset</button>
+            </div>
+          </div>
+
+          <div class="setting-row bordered">
+            <span class="setting-row-label">Link Color</span>
+            <div class="color-input-group">
+              <input type="color" id="setting-link-color" />
+              <button class="reset-btn" data-target="link-color" title="Reset to theme default">Reset</button>
+            </div>
+          </div>
+
+          <div class="setting-row bordered">
+            <span class="setting-row-label">Line / Border Color</span>
+            <div class="color-input-group">
+              <input type="color" id="setting-line-color" />
+              <button class="reset-btn" data-target="line-color" title="Reset to theme default">Reset</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
