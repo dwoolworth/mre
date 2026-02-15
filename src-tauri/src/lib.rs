@@ -73,7 +73,7 @@ pub fn run() {
 
             let about = AboutMetadata {
                 name: Some("Markdown Read & Edit".into()),
-                version: Some("0.1.0".into()),
+                version: Some("0.1.1".into()),
                 copyright: Some("Made in U.S.A.".into()),
                 ..Default::default()
             };
@@ -172,6 +172,13 @@ pub fn run() {
                 for url in urls {
                     if let Ok(path) = url.to_file_path() {
                         if path.exists() {
+                            // Store in state so get_initial_file can return it
+                            // (handles cold start before webview is ready)
+                            let state = _app.state::<AppState>();
+                            let mut current = state.current_file.lock().unwrap();
+                            *current = Some(path.clone());
+                            drop(current);
+                            // Also emit for when the app is already running
                             let _ = _app.emit("open-file", path.to_string_lossy().to_string());
                         }
                     }
