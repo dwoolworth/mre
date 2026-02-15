@@ -8,17 +8,7 @@ A fast, lightweight desktop app for reading and editing Markdown files. Built be
 
 ## Download
 
-| Platform | Download |
-|----------|----------|
-| :apple: macOS (Apple Silicon) | [MRE_0.1.0_aarch64.dmg](https://github.com/dwoolworth/mre/releases/latest/download/MRE_0.1.0_aarch64.dmg) |
-| :apple: macOS (Intel) | [MRE_0.1.0_x64.dmg](https://github.com/dwoolworth/mre/releases/latest/download/MRE_0.1.0_x64.dmg) |
-| :penguin: Linux (Debian/Ubuntu) | [MRE_0.1.0_amd64.deb](https://github.com/dwoolworth/mre/releases/latest/download/MRE_0.1.0_amd64.deb) |
-| :penguin: Linux (AppImage) | [MRE_0.1.0_amd64.AppImage](https://github.com/dwoolworth/mre/releases/latest/download/MRE_0.1.0_amd64.AppImage) |
-| :penguin: Linux (RPM) | [MRE-0.1.0-1.x86_64.rpm](https://github.com/dwoolworth/mre/releases/latest/download/MRE-0.1.0-1.x86_64.rpm) |
-| :window: Windows (Installer) | [MRE_0.1.0_x64-setup.exe](https://github.com/dwoolworth/mre/releases/latest/download/MRE_0.1.0_x64-setup.exe) |
-| :window: Windows (MSI) | [MRE_0.1.0_x64_en-US.msi](https://github.com/dwoolworth/mre/releases/latest/download/MRE_0.1.0_x64_en-US.msi) |
-
-:point_right: [All releases](https://github.com/dwoolworth/mre/releases)
+:point_right: **[Download the latest release](https://github.com/dwoolworth/mre/releases/latest)** — macOS (Apple Silicon & Intel), Linux, and Windows builds available.
 
 ---
 
