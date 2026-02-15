@@ -1,4 +1,4 @@
-use comrak::nodes::{ListType, NodeValue, TableAlignment};
+use comrak::nodes::{ListType, NodeShortCode, NodeValue, TableAlignment};
 use comrak::{parse_document, Arena, Options};
 use std::collections::HashMap;
 use std::path::Path;
@@ -13,6 +13,7 @@ pub fn markdown_to_typst(markdown: &str, base_dir: &Path) -> String {
     options.extension.autolink = true;
     options.extension.tasklist = true;
     options.extension.footnotes = true;
+    options.extension.shortcodes = true;
     options.parse.smart = true;
 
     let root = parse_document(&arena, &markdown, &options);
@@ -278,6 +279,9 @@ fn render_node<'a>(
                 out.push(']');
             }
             // Otherwise skip inline HTML
+        }
+        NodeValue::ShortCode(NodeShortCode { emoji, .. }) => {
+            out.push_str(emoji);
         }
         // Skip other node types we don't handle
         _ => {
