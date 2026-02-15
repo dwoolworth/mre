@@ -20,6 +20,7 @@ pub fn render_markdown(input: &str) -> String {
     options.extension.tasklist = true;
     options.extension.footnotes = true;
     options.extension.header_ids = Some(String::new());
+    options.extension.shortcodes = true;
 
     // Parse options
     options.parse.smart = true;
