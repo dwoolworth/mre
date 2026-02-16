@@ -232,7 +232,7 @@ pub fn open_path(path: String) -> Result<(), String> {
     Ok(())
 }
 
-fn rewrite_image_paths(html: &str, base_dir: &str) -> String {
+pub fn rewrite_image_paths(html: &str, base_dir: &str) -> String {
     // Match <img ... src="value" ...> — capture the src value
     let re = Regex::new(r#"(<img\s[^>]*src=")([^"]+)("[^>]*>)"#).unwrap();
     re.replace_all(html, |caps: &regex::Captures| {

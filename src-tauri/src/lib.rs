@@ -1,4 +1,7 @@
 mod commands;
+mod git;
+mod git_commands;
+mod github_auth;
 mod markdown;
 mod pdf_export;
 mod state;
@@ -33,8 +36,30 @@ pub fn run() {
             commands::read_file_content,
             commands::save_file,
             commands::open_path,
+            git_commands::git_file_status,
+            git_commands::git_file_history,
+            git_commands::git_file_at_commit,
+            git_commands::git_diff_file,
+            git_commands::git_remote_info,
+            git_commands::git_commit,
+            git_commands::git_push,
+            git_commands::git_pull,
+            github_auth::github_auth_start,
+            github_auth::github_auth_poll,
+            github_auth::github_auth_status,
+            github_auth::github_auth_save_token,
+            github_auth::github_auth_logout,
         ])
         .setup(|app| {
+            // Set app data dir and load saved GitHub token
+            if let Ok(data_dir) = app.path().app_data_dir() {
+                let state = app.state::<AppState>();
+                let mut dir = state.app_data_dir.lock().unwrap();
+                *dir = Some(data_dir);
+                drop(dir);
+                github_auth::load_saved_token(&state);
+            }
+
             // Check CLI args for a file path
             let args: Vec<String> = std::env::args().collect();
             if let Some(path_str) = args.get(1) {
@@ -69,6 +94,10 @@ pub fn run() {
             let save_file_as = MenuItemBuilder::new("Save As...")
                 .id("save_file_as")
                 .accelerator("Cmd+Shift+S")
+                .build(app)?;
+            let file_history = MenuItemBuilder::new("File History")
+                .id("file_history")
+                .accelerator("Cmd+Shift+H")
                 .build(app)?;
 
             let about = AboutMetadata {
@@ -107,6 +136,8 @@ pub fn run() {
                 .item(&save_file_as)
                 .separator()
                 .item(&export_pdf)
+                .separator()
+                .item(&file_history)
                 .separator()
                 .close_window()
                 .build()?;
@@ -157,6 +188,9 @@ pub fn run() {
                     }
                     "preferences" => {
                         let _ = app_handle.emit("menu-preferences", ());
+                    }
+                    "file_history" => {
+                        let _ = app_handle.emit("menu-file-history", ());
                     }
                     _ => {}
                 }

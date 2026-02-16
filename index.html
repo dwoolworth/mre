@@ -17,8 +17,37 @@
           </svg>
         </button>
         <span id="toolbar-title">Markdown Read &amp; Edit</span>
+        <span id="git-badge" style="display: none;">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="opacity: 0.7;">
+            <path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218zM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm8.5-4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zM5 3.25a.75.75 0 1 0 0 .005V3.25z"/>
+          </svg>
+          <span id="git-branch-name"></span>
+          <span id="git-file-status"></span>
+          <span id="git-auth-dot" class="auth-dot" style="display: none;" title="GitHub connected"></span>
+        </span>
       </div>
       <div id="toolbar-right">
+        <!-- Git actions: pull, push, commit -->
+        <button id="btn-pull" class="toolbar-btn" title="Pull from remote" style="display: none;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M7.47 10.78a.749.749 0 001.06 0l3.75-3.75a.749.749 0 10-1.06-1.06L8.75 8.439V1.75a.75.75 0 00-1.5 0v6.689L4.78 5.97a.749.749 0 10-1.06 1.06l3.75 3.75zM3.75 13a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5z"/>
+          </svg>
+        </button>
+        <button id="btn-push" class="toolbar-btn" title="Push to remote" style="display: none;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8.53 1.22a.749.749 0 00-1.06 0L3.72 4.97a.749.749 0 101.06 1.06l2.47-2.469V10.25a.75.75 0 001.5 0V3.561l2.47 2.469a.749.749 0 101.06-1.06L8.53 1.22zM3.75 13a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5z"/>
+          </svg>
+        </button>
+        <button id="btn-commit" class="toolbar-btn" title="Commit changes" style="display: none;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M11.93 8.5a4.002 4.002 0 00-7.86 0H.75a.75.75 0 000 1.5h3.32a4.002 4.002 0 007.86 0h3.32a.75.75 0 000-1.5h-3.32zM8 12a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/>
+          </svg>
+        </button>
+        <button id="btn-history" class="toolbar-btn" title="File History (Cmd+Shift+H)" style="display: none;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M1.5 8a6.5 6.5 0 1 1 13 0 6.5 6.5 0 0 1-13 0zM8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm.5 4.75a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 .37.65l2.5 1.5a.75.75 0 1 0 .76-1.3L8.5 7.96V4.75z"/>
+          </svg>
+        </button>
         <button id="btn-edit" class="toolbar-btn" title="Edit document" style="display: none;">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M11.013 1.427a1.75 1.75 0 012.474 0l1.086 1.086a1.75 1.75 0 010 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 01-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61zM12.259 2.8a.25.25 0 00-.354 0L10.78 3.926l1.293 1.293 1.126-1.126a.25.25 0 000-.354L12.26 2.8zM3.28 12.72l6.44-6.44-1.293-1.293-6.44 6.44a.25.25 0 00-.065.108l-.63 2.206 2.206-.63a.25.25 0 00.108-.065z"/>
@@ -82,7 +111,58 @@
           <p>Select a markdown file</p>
         </div>
         <div id="content" class="markdown-body" style="display: none;"></div>
-        <textarea id="editor" style="display: none;"></textarea>
+        <div id="editor-container" style="display: none;">
+          <div id="editor-line-numbers"></div>
+          <textarea id="editor"></textarea>
+        </div>
+        <!-- History Panel -->
+        <div id="history-panel" style="display: none;">
+          <div id="history-sidebar">
+            <div id="history-header">
+              <span>Commits</span>
+              <button id="btn-close-history" class="toolbar-btn" title="Close history">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.749.749 0 011.275.326.749.749 0 01-.215.734L9.06 8l3.22 3.22a.749.749 0 01-.326 1.275.749.749 0 01-.734-.215L8 9.06l-3.22 3.22a.751.751 0 01-1.042-.018.751.751 0 01-.018-1.042L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/>
+                </svg>
+              </button>
+            </div>
+            <div id="history-list"></div>
+          </div>
+          <div id="history-right">
+            <!-- Diff toolbar -->
+            <div id="diff-toolbar">
+              <div id="diff-toolbar-left">
+                <div class="segmented-control" id="seg-view-mode">
+                  <button class="seg-btn active" data-value="preview">Preview</button>
+                  <button class="seg-btn" data-value="diff">Diff</button>
+                </div>
+                <div id="diff-controls" style="display: none;">
+                  <div class="segmented-control" id="seg-diff-style">
+                    <button class="seg-btn active" data-value="split">Split</button>
+                    <button class="seg-btn" data-value="unified">Unified</button>
+                  </div>
+                  <label id="diff-vs-working" title="Compare against working copy">
+                    <input type="checkbox" id="diff-vs-working-cb" />
+                    <span>vs Working Copy</span>
+                  </label>
+                </div>
+              </div>
+              <span id="diff-stats" style="display: none;"></span>
+            </div>
+            <!-- Preview view -->
+            <div id="history-preview">
+              <div id="history-preview-content" class="markdown-body"></div>
+            </div>
+            <!-- Diff view -->
+            <div id="diff-view" style="display: none;">
+              <div id="diff-split" style="display: none;">
+                <div id="diff-pane-old" class="diff-pane"></div>
+                <div id="diff-pane-new" class="diff-pane"></div>
+              </div>
+              <div id="diff-unified"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -161,15 +241,6 @@
             </select>
           </div>
 
-          <!-- Show Line Numbers -->
-          <div class="setting-row bordered">
-            <span class="setting-row-label">Show Line Numbers</span>
-            <label class="toggle">
-              <input type="checkbox" id="setting-line-numbers" />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
           <!-- Colors Section -->
           <div class="setting-section-label">Colors</div>
 
@@ -204,6 +275,84 @@
               <button class="reset-btn" data-target="line-color" title="Reset to theme default">Reset</button>
             </div>
           </div>
+
+          <div class="setting-row bordered">
+            <span class="setting-row-label">Background Color</span>
+            <div class="color-input-group">
+              <input type="color" id="setting-bg-color" />
+              <button class="reset-btn" data-target="bg-color" title="Reset to theme default">Reset</button>
+            </div>
+          </div>
+
+          <div class="setting-row bordered">
+            <span class="setting-row-label">Label Color</span>
+            <div class="color-input-group">
+              <input type="color" id="setting-label-color" />
+              <button class="reset-btn" data-target="label-color" title="Reset to theme default">Reset</button>
+            </div>
+          </div>
+
+          <div class="setting-row" style="justify-content: center; padding: 16px 24px 20px;">
+            <button id="btn-reset-all-colors" class="sidebar-action-btn" style="max-width: 200px;">Reset All to Defaults</button>
+          </div>
+
+          <!-- GitHub Section -->
+          <div class="setting-section-label">GitHub</div>
+
+          <div class="setting-row bordered">
+            <span class="setting-row-label" id="settings-github-label">Not signed in</span>
+            <button id="btn-settings-github" class="sidebar-action-btn" style="flex: none; max-width: 140px;">Sign In</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Commit Popover -->
+    <div id="commit-popover" style="display: none;">
+      <div class="commit-popover-header">
+        <span>Commit</span>
+        <button id="btn-close-commit" class="toolbar-btn" title="Close">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.749.749 0 011.275.326.749.749 0 01-.215.734L9.06 8l3.22 3.22a.749.749 0 01-.326 1.275.749.749 0 01-.734-.215L8 9.06l-3.22 3.22a.751.751 0 01-1.042-.018.751.751 0 01-.018-1.042L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/>
+          </svg>
+        </button>
+      </div>
+      <input type="text" id="commit-message" placeholder="Commit message..." maxlength="200" />
+      <div class="commit-popover-actions">
+        <button id="btn-confirm-commit" class="commit-btn">Commit</button>
+      </div>
+    </div>
+
+    <!-- GitHub Auth Modal -->
+    <div id="auth-overlay" style="display: none;">
+      <div id="auth-modal">
+        <div id="auth-header">
+          <h2>Sign in to GitHub</h2>
+          <button id="btn-close-auth" class="toolbar-btn">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.749.749 0 011.275.326.749.749 0 01-.215.734L9.06 8l3.22 3.22a.749.749 0 01-.326 1.275.749.749 0 01-.734-.215L8 9.06l-3.22 3.22a.751.751 0 01-1.042-.018.751.751 0 01-.018-1.042L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/>
+            </svg>
+          </button>
+        </div>
+        <!-- PAT input -->
+        <div id="auth-body">
+          <p id="auth-instructions">Paste a <strong>Personal Access Token</strong> with <code>repo</code> scope:</p>
+          <input type="password" id="auth-token-input" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" spellcheck="false" autocomplete="off" />
+          <div id="auth-token-actions">
+            <button id="btn-create-token" class="sidebar-action-btn">Create Token on GitHub</button>
+            <button id="btn-save-token" class="commit-btn">Sign In</button>
+          </div>
+          <div id="auth-status-msg"></div>
+        </div>
+        <!-- Signed-in state -->
+        <div id="auth-signed-in" style="display: none;">
+          <div id="auth-user-info">
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" style="opacity: 0.6;">
+              <path d="M10.561 8.073a6.005 6.005 0 0 1 3.432 5.142.75.75 0 1 1-1.498.07 4.5 4.5 0 0 0-8.99 0 .75.75 0 0 1-1.498-.07 6.004 6.004 0 0 1 3.431-5.142 3.999 3.999 0 1 1 5.123 0zM10.5 5a2.5 2.5 0 1 0-5 0 2.5 2.5 0 0 0 5 0z"/>
+            </svg>
+            <span id="auth-username"></span>
+          </div>
+          <button id="btn-auth-logout" class="sidebar-action-btn" style="margin: 12px auto; max-width: 200px; display: block;">Sign Out</button>
         </div>
       </div>
     </div>
