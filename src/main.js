@@ -1,4 +1,4 @@
-import "github-markdown-css/github-markdown.css";
+import "github-markdown-css/github-markdown-light.css";
 
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
@@ -19,6 +19,14 @@ let favorites = JSON.parse(localStorage.getItem("md-favorites") || "[]");
 let showFavoritesOnly = false;
 let filterText = "";
 let editMode = false;
+let historyMode = false;
+let gitStatus = null;
+let diffMode = false; // false = preview, true = diff
+let diffStyle = "split"; // "split" or "unified"
+let selectedCommitOid = null;
+let historyCommits = [];
+let authStatus = { authenticated: false, username: null };
+let commitPopoverOpen = false;
 
 // Settings — now split into colorScheme + themeName
 let settings = {
@@ -28,7 +36,6 @@ let settings = {
   fontFamily: localStorage.getItem("md-font-family") || "system",
   headingScale: localStorage.getItem("md-heading-scale") || "normal",
   contentWidth: localStorage.getItem("md-content-width") || "medium",
-  lineNumbers: localStorage.getItem("md-line-numbers") === "true",
   sidebarVisible: localStorage.getItem("md-sidebar") !== "false",
   sidebarWidth: parseInt(localStorage.getItem("md-sidebar-width")) || 360,
   // Custom color overrides (null = use theme default)
@@ -36,6 +43,8 @@ let settings = {
   paragraphColor: localStorage.getItem("md-paragraph-color") || null,
   linkColor: localStorage.getItem("md-link-color") || null,
   lineColor: localStorage.getItem("md-line-color") || null,
+  bgColor: localStorage.getItem("md-bg-color") || null,
+  labelColor: localStorage.getItem("md-label-color") || null,
 };
 
 // Folder tree data
@@ -54,6 +63,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     filterInput: document.getElementById("filter-input"),
     contentArea: document.getElementById("content-area"),
     content: document.getElementById("content"),
+    editorContainer: document.getElementById("editor-container"),
+    editorLineNumbers: document.getElementById("editor-line-numbers"),
     editor: document.getElementById("editor"),
     emptyState: document.getElementById("empty-state"),
     fontSizeDisplay: document.getElementById("font-size-display"),
@@ -64,12 +75,48 @@ window.addEventListener("DOMContentLoaded", async () => {
     settingFontValue: document.getElementById("setting-font-value"),
     settingFontFamily: document.getElementById("setting-font-family"),
     settingContentWidth: document.getElementById("setting-content-width"),
-    settingLineNumbers: document.getElementById("setting-line-numbers"),
     // Color pickers
     settingHeadingColor: document.getElementById("setting-heading-color"),
     settingParagraphColor: document.getElementById("setting-paragraph-color"),
     settingLinkColor: document.getElementById("setting-link-color"),
     settingLineColor: document.getElementById("setting-line-color"),
+    settingBgColor: document.getElementById("setting-bg-color"),
+    settingLabelColor: document.getElementById("setting-label-color"),
+    // Git / History
+    gitBadge: document.getElementById("git-badge"),
+    gitBranchName: document.getElementById("git-branch-name"),
+    gitFileStatus: document.getElementById("git-file-status"),
+    btnHistory: document.getElementById("btn-history"),
+    historyPanel: document.getElementById("history-panel"),
+    historyList: document.getElementById("history-list"),
+    historyPreview: document.getElementById("history-preview"),
+    historyPreviewContent: document.getElementById("history-preview-content"),
+    // Diff
+    diffToolbar: document.getElementById("diff-toolbar"),
+    diffControls: document.getElementById("diff-controls"),
+    diffStats: document.getElementById("diff-stats"),
+    diffView: document.getElementById("diff-view"),
+    diffSplit: document.getElementById("diff-split"),
+    diffPaneOld: document.getElementById("diff-pane-old"),
+    diffPaneNew: document.getElementById("diff-pane-new"),
+    diffUnified: document.getElementById("diff-unified"),
+    diffVsWorkingCb: document.getElementById("diff-vs-working-cb"),
+    // Commit / Push / Pull / Auth
+    btnCommit: document.getElementById("btn-commit"),
+    btnPush: document.getElementById("btn-push"),
+    btnPull: document.getElementById("btn-pull"),
+    commitPopover: document.getElementById("commit-popover"),
+    commitMessage: document.getElementById("commit-message"),
+    btnConfirmCommit: document.getElementById("btn-confirm-commit"),
+    authOverlay: document.getElementById("auth-overlay"),
+    authBody: document.getElementById("auth-body"),
+    authTokenInput: document.getElementById("auth-token-input"),
+    authStatusMsg: document.getElementById("auth-status-msg"),
+    authSignedIn: document.getElementById("auth-signed-in"),
+    authUsername: document.getElementById("auth-username"),
+    gitAuthDot: document.getElementById("git-auth-dot"),
+    settingsGithubLabel: document.getElementById("settings-github-label"),
+    btnSettingsGithub: document.getElementById("btn-settings-github"),
   };
 
   // Apply all settings
@@ -78,7 +125,6 @@ window.addEventListener("DOMContentLoaded", async () => {
   applyFontFamily();
   applyContentWidth();
   applyHeadingScale();
-  applyLineNumbers();
   applyColorOverrides();
   applySidebar();
 
@@ -124,18 +170,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     applyContentWidth();
   });
 
-  els.settingLineNumbers.checked = settings.lineNumbers;
-  els.settingLineNumbers.addEventListener("change", (e) => {
-    settings.lineNumbers = e.target.checked;
-    localStorage.setItem("md-line-numbers", settings.lineNumbers.toString());
-    applyLineNumbers();
-  });
-
   // Color pickers
   setupColorPicker("setting-heading-color", "headingColor", "md-heading-color");
   setupColorPicker("setting-paragraph-color", "paragraphColor", "md-paragraph-color");
   setupColorPicker("setting-link-color", "linkColor", "md-link-color");
   setupColorPicker("setting-line-color", "lineColor", "md-line-color");
+  setupColorPicker("setting-bg-color", "bgColor", "md-bg-color");
+  setupColorPicker("setting-label-color", "labelColor", "md-label-color");
 
   // Reset buttons
   document.querySelectorAll(".reset-btn").forEach((btn) => {
@@ -146,6 +187,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         "paragraph-color": { key: "paragraphColor", storageKey: "md-paragraph-color", pickerId: "setting-paragraph-color" },
         "link-color": { key: "linkColor", storageKey: "md-link-color", pickerId: "setting-link-color" },
         "line-color": { key: "lineColor", storageKey: "md-line-color", pickerId: "setting-line-color" },
+        "bg-color": { key: "bgColor", storageKey: "md-bg-color", pickerId: "setting-bg-color" },
+        "label-color": { key: "labelColor", storageKey: "md-label-color", pickerId: "setting-label-color" },
       };
       const info = map[target];
       if (info) {
@@ -157,6 +200,18 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
+  // Reset All to Defaults
+  document.getElementById("btn-reset-all-colors").addEventListener("click", () => {
+    const keys = ["headingColor", "paragraphColor", "linkColor", "lineColor", "bgColor", "labelColor"];
+    const storageKeys = ["md-heading-color", "md-paragraph-color", "md-link-color", "md-line-color", "md-bg-color", "md-label-color"];
+    keys.forEach((k, i) => {
+      settings[k] = null;
+      localStorage.removeItem(storageKeys[i]);
+    });
+    applyColorOverrides();
+    syncColorPickersToTheme();
+  });
+
   // Sync color pickers to current theme defaults
   syncColorPickersToTheme();
 
@@ -165,9 +220,62 @@ window.addEventListener("DOMContentLoaded", async () => {
   els.btnSave = document.getElementById("btn-save");
   els.btnExportPdf = document.getElementById("btn-export-pdf");
   document.getElementById("btn-toggle-sidebar").addEventListener("click", toggleSidebar);
+  els.btnHistory.addEventListener("click", toggleHistory);
+  document.getElementById("btn-close-history").addEventListener("click", exitHistory);
+  initSegmentedControl("seg-view-mode", "preview", (val) => {
+    diffMode = val === "diff";
+    updateHistoryView();
+  });
+  initSegmentedControl("seg-diff-style", "split", (val) => {
+    diffStyle = val;
+    if (diffMode && selectedCommitOid) renderDiff();
+  });
+  els.diffVsWorkingCb.addEventListener("change", () => {
+    if (diffMode && selectedCommitOid) renderDiff();
+  });
   els.btnEdit.addEventListener("click", enterEditMode);
   els.btnSave.addEventListener("click", saveFile);
+  els.editor.addEventListener("input", updateEditorLineNumbers);
+  els.editor.addEventListener("scroll", () => {
+    els.editorLineNumbers.scrollTop = els.editor.scrollTop;
+  });
   els.btnExportPdf.addEventListener("click", exportPdf);
+  els.btnCommit.addEventListener("click", toggleCommitPopover);
+  els.btnPush.addEventListener("click", doPush);
+  els.btnPull.addEventListener("click", doPull);
+  document.getElementById("btn-close-commit").addEventListener("click", closeCommitPopover);
+  els.btnConfirmCommit.addEventListener("click", doCommit);
+  els.commitMessage.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && els.commitMessage.value.trim()) doCommit();
+  });
+  // Auth modal
+  document.getElementById("btn-close-auth").addEventListener("click", closeAuthModal);
+  els.authOverlay.addEventListener("click", (e) => {
+    if (e.target === els.authOverlay) closeAuthModal();
+  });
+  document.getElementById("btn-create-token").addEventListener("click", () => {
+    invoke("open_path", { path: "https://github.com/settings/tokens/new?scopes=repo&description=MRE+Markdown+Editor" });
+  });
+  document.getElementById("btn-save-token").addEventListener("click", doSaveToken);
+  els.authTokenInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doSaveToken();
+  });
+  document.getElementById("btn-auth-logout").addEventListener("click", doLogout);
+  els.btnSettingsGithub.addEventListener("click", () => {
+    closeSettings();
+    openAuthModal();
+  });
+  // Click on auth dot opens auth modal
+  els.gitAuthDot.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openAuthModal();
+  });
+  // Close commit popover on outside click
+  document.addEventListener("click", (e) => {
+    if (commitPopoverOpen && !els.commitPopover.contains(e.target) && !els.btnCommit.contains(e.target)) {
+      closeCommitPopover();
+    }
+  });
   document.getElementById("btn-font-down").addEventListener("click", () => changeFontSize(-1));
   document.getElementById("btn-font-up").addEventListener("click", () => changeFontSize(1));
   document.getElementById("btn-settings").addEventListener("click", openSettings);
@@ -206,7 +314,11 @@ window.addEventListener("DOMContentLoaded", async () => {
       e.preventDefault();
       toggleSidebar();
     } else if (e.key === "Escape") {
-      if (editMode) {
+      if (commitPopoverOpen) {
+        closeCommitPopover();
+      } else if (historyMode) {
+        exitHistory();
+      } else if (editMode) {
         exitEditMode();
       } else {
         closeSettings();
@@ -264,6 +376,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   await listen("menu-save-as", () => {
     if (editMode) saveFileAs();
   });
+  await listen("menu-file-history", () => {
+    if (currentPath) toggleHistory();
+  });
 
   // Check for initial file
   try {
@@ -274,6 +389,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   } catch (e) {
     console.error("Failed to get initial file:", e);
   }
+
+  // Check GitHub auth status on startup
+  refreshAuthStatus();
 });
 
 // ===== Segmented Control Helper =====
@@ -317,6 +435,8 @@ function syncColorPickersToTheme() {
   const textDefault = cs.getPropertyValue("--text-primary").trim();
   const linkDefault = cs.getPropertyValue("--link-color").trim();
   const borderDefault = cs.getPropertyValue("--border-color").trim();
+  const bgDefault = cs.getPropertyValue("--bg-primary").trim();
+  const codeDefault = cs.getPropertyValue("--code-bg").trim();
 
   if (els.settingHeadingColor) {
     els.settingHeadingColor.value = settings.headingColor || toHex(headingDefault);
@@ -329,6 +449,12 @@ function syncColorPickersToTheme() {
   }
   if (els.settingLineColor) {
     els.settingLineColor.value = settings.lineColor || toHex(borderDefault);
+  }
+  if (els.settingBgColor) {
+    els.settingBgColor.value = settings.bgColor || toHex(bgDefault);
+  }
+  if (els.settingLabelColor) {
+    els.settingLabelColor.value = settings.labelColor || toHex(codeDefault);
   }
 }
 
@@ -362,6 +488,7 @@ function toHex(color) {
 async function openFile(path) {
   try {
     if (editMode) exitEditMode();
+    const wasInHistory = historyMode;
 
     const result = await invoke("open_and_render", { path });
     currentPath = result.filePath;
@@ -369,10 +496,18 @@ async function openFile(path) {
     els.toolbarTitle.textContent = result.fileName;
     document.title = `MRE - ${result.fileName}`;
     els.content.innerHTML = result.html;
-    els.content.style.display = "block";
     els.emptyState.style.display = "none";
-    els.btnExportPdf.style.display = "";
-    els.btnEdit.style.display = "";
+
+    if (wasInHistory) {
+      // Keep history open but hide rendered content behind it
+      els.content.style.display = "none";
+      els.btnEdit.style.display = "none";
+      els.btnExportPdf.style.display = "none";
+    } else {
+      els.content.style.display = "block";
+      els.btnExportPdf.style.display = "";
+      els.btnEdit.style.display = "";
+    }
 
     // Mark active in sidebar
     document.querySelectorAll(".tree-item.active").forEach((el) => el.classList.remove("active"));
@@ -389,6 +524,12 @@ async function openFile(path) {
     });
 
     await highlightCodeBlocks();
+    refreshGitStatus(result.filePath);
+
+    // Reload history for the new file if panel is open
+    if (wasInHistory) {
+      enterHistory();
+    }
   } catch (err) {
     els.content.innerHTML = `<div class="error-message">Failed to open file: ${escapeHtml(String(err))}</div>`;
     els.content.style.display = "block";
@@ -594,11 +735,12 @@ async function enterEditMode() {
     const raw = await invoke("read_file_content", { path: currentPath });
     els.editor.value = raw;
     els.content.style.display = "none";
-    els.editor.style.display = "block";
+    els.editorContainer.style.display = "flex";
     els.btnEdit.style.display = "none";
     els.btnSave.style.display = "";
     els.btnExportPdf.style.display = "none";
     editMode = true;
+    updateEditorLineNumbers();
     els.editor.focus();
   } catch (err) {
     console.error("Failed to read file for editing:", err);
@@ -606,12 +748,21 @@ async function enterEditMode() {
 }
 
 function exitEditMode() {
-  els.editor.style.display = "none";
+  els.editorContainer.style.display = "none";
   els.content.style.display = "block";
   els.btnSave.style.display = "none";
   els.btnEdit.style.display = "";
   els.btnExportPdf.style.display = "";
   editMode = false;
+}
+
+function updateEditorLineNumbers() {
+  const lineCount = els.editor.value.split("\n").length;
+  let html = "";
+  for (let i = 1; i <= lineCount; i++) {
+    html += `<span class="editor-line-num">${i}</span>`;
+  }
+  els.editorLineNumbers.innerHTML = html;
 }
 
 async function saveFile() {
@@ -687,7 +838,6 @@ async function highlightCodeBlocks() {
           entries.forEach((entry) => {
             if (entry.isIntersecting) {
               hl.highlightElement(entry.target);
-              if (settings.lineNumbers) addLineNumbers(entry.target);
               observer.unobserve(entry.target);
             }
           });
@@ -698,21 +848,11 @@ async function highlightCodeBlocks() {
     } else {
       codeBlocks.forEach((block) => {
         hl.highlightElement(block);
-        if (settings.lineNumbers) addLineNumbers(block);
       });
     }
   } catch (e) {
     console.error("Failed to load highlight.js:", e);
   }
-}
-
-function addLineNumbers(codeEl) {
-  // Wrap each line in a span with a line number
-  const lines = codeEl.innerHTML.split("\n");
-  if (lines[lines.length - 1] === "") lines.pop(); // remove trailing empty line
-  codeEl.innerHTML = lines
-    .map((line, i) => `<span class="code-line"><span class="line-number">${i + 1}</span>${line}</span>`)
-    .join("\n");
 }
 
 // ===== Theme =====
@@ -768,12 +908,6 @@ function applyHeadingScale() {
   els.content.classList.add(`heading-${settings.headingScale}`);
 }
 
-// ===== Line Numbers =====
-function applyLineNumbers() {
-  if (!els.content) return;
-  els.content.classList.toggle("show-line-numbers", settings.lineNumbers);
-}
-
 // ===== Color Overrides =====
 function applyColorOverrides() {
   const el = document.body;
@@ -796,6 +930,16 @@ function applyColorOverrides() {
     el.style.setProperty("--border-color", settings.lineColor);
   } else {
     el.style.removeProperty("--border-color");
+  }
+  if (settings.bgColor) {
+    el.style.setProperty("--bg-primary", settings.bgColor);
+  } else {
+    el.style.removeProperty("--bg-primary");
+  }
+  if (settings.labelColor) {
+    el.style.setProperty("--code-bg", settings.labelColor);
+  } else {
+    el.style.removeProperty("--code-bg");
   }
 }
 
@@ -862,6 +1006,509 @@ function openSettings() {
 function closeSettings() {
   if (els.settingsOverlay.style.display !== "none") {
     els.settingsOverlay.style.display = "none";
+  }
+}
+
+// ===== Git Status =====
+async function refreshGitStatus(path) {
+  try {
+    gitStatus = await invoke("git_file_status", { path });
+    if (gitStatus.isRepo) {
+      els.gitBadge.style.display = "";
+      els.gitBranchName.textContent = gitStatus.branch || "detached";
+      els.gitFileStatus.textContent = gitStatus.fileStatus === "clean" ? "" : gitStatus.fileStatus;
+      els.gitFileStatus.className = gitStatus.fileStatus;
+      els.btnHistory.style.display = "";
+      // Show commit button when file is modified/untracked
+      const showCommit = gitStatus.fileStatus === "modified" || gitStatus.fileStatus === "untracked";
+      els.btnCommit.style.display = showCommit ? "" : "none";
+      // Push/pull visibility depends on remote + auth
+      updateAuthUI();
+    } else {
+      els.gitBadge.style.display = "none";
+      els.btnHistory.style.display = "none";
+      els.btnCommit.style.display = "none";
+      els.btnPush.style.display = "none";
+      els.btnPull.style.display = "none";
+    }
+  } catch (e) {
+    els.gitBadge.style.display = "none";
+    els.btnHistory.style.display = "none";
+    els.btnCommit.style.display = "none";
+    els.btnPush.style.display = "none";
+    els.btnPull.style.display = "none";
+  }
+}
+
+// ===== History Panel =====
+function toggleHistory() {
+  if (historyMode) {
+    exitHistory();
+  } else {
+    enterHistory();
+  }
+}
+
+async function enterHistory() {
+  if (!currentPath || editMode) return;
+  historyMode = true;
+  diffMode = false;
+  selectedCommitOid = null;
+
+  // Reset view mode toggle to preview
+  document.querySelectorAll("#seg-view-mode .seg-btn").forEach((b) => {
+    b.classList.toggle("active", b.dataset.value === "preview");
+  });
+
+  // Hide normal content, show history panel
+  els.content.style.display = "none";
+  els.emptyState.style.display = "none";
+  els.historyPanel.style.display = "flex";
+  els.btnHistory.classList.add("active");
+  els.btnEdit.style.display = "none";
+  els.btnExportPdf.style.display = "none";
+
+  updateHistoryView();
+
+  // Load commit list
+  els.historyList.innerHTML = '<div style="padding: 16px; color: var(--text-muted); font-size: 13px;">Loading history...</div>';
+  els.historyPreviewContent.innerHTML = '';
+
+  try {
+    historyCommits = await invoke("git_file_history", { path: currentPath, limit: 100 });
+    els.historyList.innerHTML = "";
+
+    if (historyCommits.length === 0) {
+      els.historyList.innerHTML = '<div style="padding: 16px; color: var(--text-muted); font-size: 13px;">No commits found for this file.</div>';
+      return;
+    }
+
+    for (const commit of historyCommits) {
+      const item = document.createElement("div");
+      item.className = "history-item";
+      item.dataset.oid = commit.oid;
+
+      const msg = document.createElement("div");
+      msg.className = "history-item-message";
+      msg.textContent = commit.message;
+
+      const meta = document.createElement("div");
+      meta.className = "history-item-meta";
+
+      const hash = document.createElement("span");
+      hash.className = "history-item-hash";
+      hash.textContent = commit.oid.substring(0, 7);
+      if (gitStatus && gitStatus.remoteUrl) {
+        hash.classList.add("linkable");
+        hash.title = "Open on web";
+        hash.addEventListener("click", (e) => {
+          e.stopPropagation();
+          invoke("open_path", { path: `${gitStatus.remoteUrl}/commit/${commit.oid}` });
+        });
+      }
+
+      const author = document.createElement("span");
+      author.className = "history-item-author";
+      author.textContent = commit.author;
+
+      const date = document.createElement("span");
+      date.className = "history-item-date";
+      date.textContent = commit.dateRelative;
+
+      meta.appendChild(hash);
+      meta.appendChild(author);
+      meta.appendChild(date);
+      item.appendChild(msg);
+      item.appendChild(meta);
+      els.historyList.appendChild(item);
+
+      item.addEventListener("click", () => selectHistoryCommit(commit.oid, item));
+    }
+
+    // Auto-select the first commit
+    const firstItem = els.historyList.querySelector(".history-item");
+    if (firstItem) {
+      selectHistoryCommit(historyCommits[0].oid, firstItem);
+    }
+  } catch (err) {
+    els.historyList.innerHTML = `<div style="padding: 16px; color: var(--text-muted); font-size: 13px;">Failed to load history: ${escapeHtml(String(err))}</div>`;
+  }
+}
+
+async function selectHistoryCommit(oid, itemEl) {
+  // Update selection UI
+  els.historyList.querySelectorAll(".history-item.active").forEach((el) => el.classList.remove("active"));
+  itemEl.classList.add("active");
+  selectedCommitOid = oid;
+
+  if (diffMode) {
+    await renderDiff();
+  } else {
+    await renderPreview(oid);
+  }
+}
+
+async function renderPreview(oid) {
+  els.historyPreviewContent.innerHTML = '<div style="padding: 32px; color: var(--text-muted); font-size: 13px;">Loading...</div>';
+
+  try {
+    const result = await invoke("git_file_at_commit", { path: currentPath, oid });
+    els.historyPreviewContent.innerHTML = result.html;
+    els.historyPreviewContent.style.fontSize = `${settings.fontSize}px`;
+
+    // Highlight code blocks in the preview
+    const codeBlocks = els.historyPreviewContent.querySelectorAll("pre code");
+    if (codeBlocks.length > 0) {
+      try {
+        const hl = await loadHighlightJs();
+        codeBlocks.forEach((block) => hl.highlightElement(block));
+      } catch (_) {}
+    }
+  } catch (err) {
+    els.historyPreviewContent.innerHTML = `<div class="error-message">${escapeHtml(String(err))}</div>`;
+  }
+}
+
+function updateHistoryView() {
+  els.diffControls.style.display = diffMode ? "flex" : "none";
+  els.historyPreview.style.display = diffMode ? "none" : "";
+  els.diffView.style.display = diffMode ? "" : "none";
+  els.diffStats.style.display = diffMode ? "" : "none";
+  if (diffMode && selectedCommitOid) {
+    renderDiff();
+  }
+}
+
+async function renderDiff() {
+  if (!selectedCommitOid || !currentPath) return;
+
+  // Find the parent commit (next in list, since list is newest-first)
+  const idx = historyCommits.findIndex((c) => c.oid === selectedCommitOid);
+  const vsWorking = els.diffVsWorkingCb.checked;
+
+  let oldOid, newOid;
+  if (vsWorking) {
+    // Selected commit vs working copy
+    oldOid = selectedCommitOid;
+    newOid = null; // null = working copy
+  } else {
+    // Parent commit vs selected commit
+    oldOid = idx < historyCommits.length - 1 ? historyCommits[idx + 1].oid : null;
+    newOid = selectedCommitOid;
+  }
+
+  try {
+    const result = await invoke("git_diff_file", {
+      path: currentPath,
+      oldOid: oldOid,
+      newOid: newOid,
+    });
+
+    // Update stats
+    els.diffStats.innerHTML =
+      `<span class="diff-stat-add">+${result.additions}</span> <span class="diff-stat-del">-${result.deletions}</span>`;
+
+    if (diffStyle === "split") {
+      renderSplitDiff(result.lines);
+    } else {
+      renderUnifiedDiff(result.lines);
+    }
+  } catch (err) {
+    els.diffPaneOld.innerHTML = `<div class="error-message">${escapeHtml(String(err))}</div>`;
+    els.diffPaneNew.innerHTML = "";
+    els.diffUnified.innerHTML = `<div class="error-message">${escapeHtml(String(err))}</div>`;
+  }
+}
+
+function renderSplitDiff(lines) {
+  els.diffSplit.style.display = "flex";
+  els.diffUnified.style.display = "none";
+
+  let oldHtml = "";
+  let newHtml = "";
+
+  for (const line of lines) {
+    const content = escapeHtml(line.content.replace(/\n$/, ""));
+    const oldNum = line.oldLine != null ? line.oldLine : "";
+    const newNum = line.newLine != null ? line.newLine : "";
+
+    if (line.tag === "equal") {
+      const row = `<div class="diff-line"><span class="diff-line-num">${oldNum}</span><span class="diff-line-content">${content}</span></div>`;
+      oldHtml += row.replace(oldNum, oldNum);
+      newHtml += `<div class="diff-line"><span class="diff-line-num">${newNum}</span><span class="diff-line-content">${content}</span></div>`;
+    } else if (line.tag === "delete") {
+      oldHtml += `<div class="diff-line delete"><span class="diff-line-num">${oldNum}</span><span class="diff-line-content">${content}</span></div>`;
+      newHtml += `<div class="diff-line"><span class="diff-line-num"></span><span class="diff-line-content"></span></div>`;
+    } else if (line.tag === "insert") {
+      oldHtml += `<div class="diff-line"><span class="diff-line-num"></span><span class="diff-line-content"></span></div>`;
+      newHtml += `<div class="diff-line insert"><span class="diff-line-num">${newNum}</span><span class="diff-line-content">${content}</span></div>`;
+    }
+  }
+
+  els.diffPaneOld.innerHTML = oldHtml;
+  els.diffPaneNew.innerHTML = newHtml;
+
+  // Synced scrolling
+  setupSyncedScroll(els.diffPaneOld, els.diffPaneNew);
+}
+
+function renderUnifiedDiff(lines) {
+  els.diffSplit.style.display = "none";
+  els.diffUnified.style.display = "";
+
+  let html = "";
+  for (const line of lines) {
+    const content = escapeHtml(line.content.replace(/\n$/, ""));
+    const oldNum = line.oldLine != null ? line.oldLine : "";
+    const newNum = line.newLine != null ? line.newLine : "";
+    let prefix = " ";
+    let cls = "";
+
+    if (line.tag === "insert") {
+      prefix = "+";
+      cls = " insert";
+    } else if (line.tag === "delete") {
+      prefix = "-";
+      cls = " delete";
+    }
+
+    html += `<div class="diff-line${cls}"><span class="diff-line-num-old">${oldNum}</span><span class="diff-line-num-new">${newNum}</span><span class="diff-line-content"><span class="diff-line-prefix">${prefix}</span>${content}</span></div>`;
+  }
+
+  els.diffUnified.innerHTML = html;
+}
+
+function setupSyncedScroll(paneA, paneB) {
+  let syncing = false;
+  const sync = (source, target) => {
+    if (syncing) return;
+    syncing = true;
+    target.scrollTop = source.scrollTop;
+    target.scrollLeft = source.scrollLeft;
+    syncing = false;
+  };
+  // Remove old listeners by cloning
+  const newA = paneA.cloneNode(true);
+  const newB = paneB.cloneNode(true);
+  paneA.parentNode.replaceChild(newA, paneA);
+  paneB.parentNode.replaceChild(newB, paneB);
+  els.diffPaneOld = newA;
+  els.diffPaneNew = newB;
+  newA.addEventListener("scroll", () => sync(newA, newB));
+  newB.addEventListener("scroll", () => sync(newB, newA));
+}
+
+function exitHistory() {
+  if (!historyMode) return;
+  historyMode = false;
+  diffMode = false;
+  selectedCommitOid = null;
+  historyCommits = [];
+  els.historyPanel.style.display = "none";
+  els.content.style.display = "block";
+  els.btnHistory.classList.remove("active");
+  if (currentPath) {
+    els.btnEdit.style.display = "";
+    els.btnExportPdf.style.display = "";
+  }
+}
+
+// ===== Commit / Push / Pull =====
+function toggleCommitPopover() {
+  if (commitPopoverOpen) {
+    closeCommitPopover();
+  } else {
+    openCommitPopover();
+  }
+}
+
+function openCommitPopover() {
+  commitPopoverOpen = true;
+  els.commitPopover.style.display = "block";
+  els.commitMessage.value = "";
+  els.commitMessage.focus();
+}
+
+function closeCommitPopover() {
+  commitPopoverOpen = false;
+  els.commitPopover.style.display = "none";
+}
+
+async function doCommit() {
+  const message = els.commitMessage.value.trim();
+  if (!message || !currentPath) return;
+
+  els.btnConfirmCommit.disabled = true;
+  els.btnConfirmCommit.textContent = "Committing...";
+
+  try {
+    const commit = await invoke("git_commit", { path: currentPath, message });
+    closeCommitPopover();
+    // Refresh git status to show "clean"
+    refreshGitStatus(currentPath);
+    els.toolbarTitle.textContent = `Committed: ${commit.oid.substring(0, 7)}`;
+    setTimeout(() => {
+      if (currentPath) {
+        const name = currentPath.split(/[/\\]/).pop();
+        els.toolbarTitle.textContent = name;
+      }
+    }, 2000);
+  } catch (err) {
+    alert("Commit failed: " + err);
+  } finally {
+    els.btnConfirmCommit.disabled = false;
+    els.btnConfirmCommit.textContent = "Commit";
+  }
+}
+
+async function doPush() {
+  if (!currentPath) return;
+  if (!authStatus.authenticated) {
+    openAuthModal();
+    return;
+  }
+
+  els.btnPush.disabled = true;
+  const prevTitle = els.toolbarTitle.textContent;
+  els.toolbarTitle.textContent = "Pushing...";
+
+  try {
+    await invoke("git_push", { path: currentPath });
+    els.toolbarTitle.textContent = "Pushed!";
+    setTimeout(() => { els.toolbarTitle.textContent = prevTitle; }, 2000);
+  } catch (err) {
+    els.toolbarTitle.textContent = prevTitle;
+    alert("Push failed: " + err);
+  } finally {
+    els.btnPush.disabled = false;
+  }
+}
+
+async function doPull() {
+  if (!currentPath) return;
+  if (!authStatus.authenticated) {
+    openAuthModal();
+    return;
+  }
+
+  els.btnPull.disabled = true;
+  const prevTitle = els.toolbarTitle.textContent;
+  els.toolbarTitle.textContent = "Pulling...";
+
+  try {
+    const msg = await invoke("git_pull", { path: currentPath });
+    els.toolbarTitle.textContent = msg;
+    setTimeout(() => { els.toolbarTitle.textContent = prevTitle; }, 2000);
+    // Reload file if it changed
+    if (msg.includes("Fast-forwarded")) {
+      await openFile(currentPath);
+    }
+  } catch (err) {
+    els.toolbarTitle.textContent = prevTitle;
+    alert("Pull failed: " + err);
+  } finally {
+    els.btnPull.disabled = false;
+  }
+}
+
+// ===== GitHub Auth =====
+async function refreshAuthStatus() {
+  try {
+    authStatus = await invoke("github_auth_status");
+    updateAuthUI();
+  } catch (e) {
+    authStatus = { authenticated: false, username: null };
+    updateAuthUI();
+  }
+}
+
+function updateAuthUI() {
+  // Auth dot in git badge
+  if (gitStatus && gitStatus.isRepo) {
+    els.gitAuthDot.style.display = authStatus.authenticated ? "" : "none";
+    els.gitAuthDot.title = authStatus.authenticated
+      ? `GitHub: ${authStatus.username || "connected"}`
+      : "Not signed in to GitHub";
+    // Show push/pull when there's a remote and we have auth
+    const hasRemote = gitStatus.remoteUrl != null;
+    els.btnPush.style.display = hasRemote ? "" : "none";
+    els.btnPull.style.display = hasRemote ? "" : "none";
+  }
+  // Settings row
+  if (authStatus.authenticated) {
+    els.settingsGithubLabel.textContent = `Signed in as ${authStatus.username || "GitHub user"}`;
+    els.btnSettingsGithub.textContent = "Manage";
+  } else {
+    els.settingsGithubLabel.textContent = "Not signed in";
+    els.btnSettingsGithub.textContent = "Sign In";
+  }
+}
+
+function openAuthModal() {
+  els.authOverlay.style.display = "flex";
+  els.authStatusMsg.textContent = "";
+  els.authStatusMsg.className = "";
+
+  if (authStatus.authenticated) {
+    els.authBody.style.display = "none";
+    els.authSignedIn.style.display = "block";
+    els.authUsername.textContent = authStatus.username || "Connected";
+  } else {
+    els.authBody.style.display = "block";
+    els.authSignedIn.style.display = "none";
+    els.authTokenInput.value = "";
+    els.authTokenInput.focus();
+  }
+}
+
+function closeAuthModal() {
+  els.authOverlay.style.display = "none";
+}
+
+async function doSaveToken() {
+  const token = els.authTokenInput.value.trim();
+  if (!token) {
+    els.authStatusMsg.textContent = "Please paste a token.";
+    els.authStatusMsg.className = "error";
+    return;
+  }
+
+  const saveBtn = document.getElementById("btn-save-token");
+  saveBtn.disabled = true;
+  saveBtn.textContent = "Verifying...";
+  els.authStatusMsg.textContent = "";
+  els.authStatusMsg.className = "";
+
+  try {
+    const result = await invoke("github_auth_save_token", { token });
+    authStatus = result;
+    updateAuthUI();
+    // Switch to signed-in view
+    els.authBody.style.display = "none";
+    els.authSignedIn.style.display = "block";
+    els.authUsername.textContent = authStatus.username || "Connected";
+  } catch (err) {
+    els.authStatusMsg.textContent = err;
+    els.authStatusMsg.className = "error";
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = "Sign In";
+  }
+}
+
+async function doLogout() {
+  try {
+    await invoke("github_auth_logout");
+    authStatus = { authenticated: false, username: null };
+    updateAuthUI();
+    // Switch back to sign-in view
+    els.authBody.style.display = "block";
+    els.authSignedIn.style.display = "none";
+    els.authTokenInput.value = "";
+    els.authStatusMsg.textContent = "Signed out.";
+    els.authStatusMsg.className = "";
+  } catch (e) {
+    alert("Logout failed: " + e);
   }
 }
 

@@ -270,6 +270,7 @@ body {
 #content-area {
   flex: 1; overflow-y: auto; overflow-x: hidden;
   background: var(--bg-primary); min-width: 0;
+  position: relative;
 }
 #empty-state {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -306,65 +307,83 @@ body {
 #content.heading-spacious h3 { font-size: 1.4em; margin: 0.65em 0 0.35em; }
 #content.heading-spacious h4 { font-size: 1.2em; margin: 0.55em 0 0.3em; }
 
-/* ===== Line Numbers (code blocks) ===== */
-/* Line numbers are added via JS (addLineNumbers) after highlight.js runs */
-.code-line { display: block; }
-.line-number {
-  display: inline-block; width: 3em; text-align: right;
-  padding-right: 1em; color: var(--text-muted); user-select: none;
-  font-size: inherit; opacity: 0.5;
-}
-#content:not(.show-line-numbers) .line-number { display: none; }
-
 /* ===== Editor ===== */
+#editor-container {
+  display: none; width: 100%; height: 100%; flex-direction: row;
+  background: var(--bg-primary);
+}
+#editor-line-numbers {
+  width: 48px; min-width: 48px; padding: 32px 0;
+  text-align: right; user-select: none;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 14px; line-height: 1.6;
+  color: var(--text-muted); opacity: 0.5;
+  overflow: hidden; flex-shrink: 0;
+  background: var(--bg-secondary); border-right: 1px solid var(--border-color);
+}
+.editor-line-num {
+  display: block; padding: 0 8px; height: calc(14px * 1.6);
+}
 #editor {
-  width: 100%; height: 100%; resize: none; border: none;
-  padding: 32px; box-sizing: border-box;
+  flex: 1; height: 100%; resize: none; border: none;
+  padding: 32px 32px 32px 16px; box-sizing: border-box;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   font-size: 14px; line-height: 1.6; tab-size: 4;
   background: var(--bg-primary); color: var(--text-primary);
-  display: none; outline: none;
+  outline: none;
 }
 
 /* ===== Markdown Body Overrides ===== */
-.markdown-body {
-  color: var(--text-primary) !important;
-  background-color: transparent !important;
+/* [data-theme] boosts specificity to always beat github-markdown-light.css */
+[data-theme] .markdown-body {
+  color: var(--text-primary);
+  background-color: transparent;
   font-family: inherit; line-height: 1.6;
+  color-scheme: unset;
 }
-.markdown-body h1, .markdown-body h2, .markdown-body h3,
-.markdown-body h4, .markdown-body h5, .markdown-body h6 {
+[data-theme] .markdown-body h1, [data-theme] .markdown-body h2, [data-theme] .markdown-body h3,
+[data-theme] .markdown-body h4, [data-theme] .markdown-body h5, [data-theme] .markdown-body h6 {
   color: var(--heading-color);
 }
-.markdown-body h1, .markdown-body h2 {
+[data-theme] .markdown-body h1, [data-theme] .markdown-body h2 {
   border-bottom: 1px solid var(--border-color);
   padding-bottom: 0.3em;
 }
-.markdown-body a { color: var(--link-color); }
+[data-theme] .markdown-body a { color: var(--link-color); }
 
-.markdown-body code, .markdown-body tt {
+[data-theme] .markdown-body code, [data-theme] .markdown-body tt {
   background-color: var(--code-bg); border-radius: 6px; padding: 0.2em 0.4em;
   font-size: 85%; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  color: var(--text-primary);
 }
-.markdown-body pre {
+[data-theme] .markdown-body pre {
   background-color: var(--bg-secondary); border-radius: 6px; padding: 16px;
   overflow-x: auto; border: 1px solid var(--border-color);
+  color: var(--text-primary);
 }
-.markdown-body pre code {
+[data-theme] .markdown-body pre code,
+[data-theme] .markdown-body pre tt {
   background-color: transparent; padding: 0; font-size: 85%; border: none;
+  color: inherit;
 }
-.markdown-body blockquote {
+[data-theme] .markdown-body blockquote {
   border-left: 4px solid var(--border-color); color: var(--text-secondary); padding: 0 1em;
 }
-.markdown-body hr { border: none; border-top: 1px solid var(--border-color); }
-.markdown-body table { border-collapse: collapse; width: 100%; }
-.markdown-body table th, .markdown-body table td {
+[data-theme] .markdown-body hr { border: none; border-top: 1px solid var(--border-color); }
+[data-theme] .markdown-body table { border-collapse: collapse; width: 100%; }
+[data-theme] .markdown-body table th {
   border: 1px solid var(--border-color); padding: 6px 13px;
+  background-color: var(--bg-tertiary); color: var(--text-primary);
 }
-.markdown-body table tr:nth-child(2n) { background-color: var(--bg-secondary); }
-.markdown-body img { max-width: 100%; height: auto; border-radius: 4px; }
-.markdown-body .task-list-item { list-style-type: none; }
-.markdown-body .task-list-item input[type="checkbox"] { margin: 0 0.35em 0 -1.4em; }
+[data-theme] .markdown-body table td {
+  border: 1px solid var(--border-color); padding: 6px 13px;
+  color: var(--text-primary);
+}
+[data-theme] .markdown-body table tr { background-color: var(--bg-primary); }
+[data-theme] .markdown-body table tr:nth-child(2n) { background-color: var(--bg-secondary); }
+[data-theme] .markdown-body img { max-width: 100%; height: auto; border-radius: 4px; }
+[data-theme] .markdown-body .task-list-item { list-style-type: none; }
+[data-theme] .markdown-body .task-list-item input[type="checkbox"] { margin: 0 0.35em 0 -1.4em; }
 
 /* ===== Settings Modal ===== */
 #settings-overlay {
@@ -477,6 +496,244 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { opacity: 0.8; }
+
+/* ===== Git Badge ===== */
+#git-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; color: var(--text-secondary);
+  background: var(--bg-tertiary); border-radius: 4px;
+  padding: 2px 8px; margin-left: 8px; font-weight: 500;
+}
+#git-branch-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#git-file-status {
+  font-size: 10px; padding: 0 4px; border-radius: 3px;
+  font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px;
+}
+#git-file-status.modified { color: #d29922; }
+#git-file-status.untracked { color: #3fb950; }
+#git-file-status.staged { color: #58a6ff; }
+#git-file-status.clean { display: none; }
+
+/* ===== History Panel ===== */
+#history-panel {
+  display: none; position: absolute; inset: 0;
+  background: var(--bg-primary); z-index: 10;
+  flex-direction: row;
+}
+#history-panel[style*="flex"] { display: flex !important; }
+#history-sidebar {
+  width: 300px; min-width: 240px; max-width: 400px;
+  border-right: 1px solid var(--border-color);
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--bg-secondary);
+}
+#history-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; font-size: 13px; font-weight: 600;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+#history-list {
+  flex: 1; overflow-y: auto; padding: 4px 0;
+}
+.history-item {
+  padding: 10px 16px; cursor: pointer; border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.05s;
+}
+.history-item:hover { background: var(--hover-bg); }
+.history-item.active { background: var(--active-bg); }
+.history-item-message {
+  font-size: 13px; font-weight: 500; color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  margin-bottom: 4px;
+}
+.history-item-meta {
+  font-size: 11px; color: var(--text-secondary);
+  display: flex; align-items: center; gap: 6px;
+}
+.history-item-hash {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  color: var(--text-muted); font-size: 11px;
+}
+.history-item-hash.linkable { cursor: pointer; }
+.history-item-hash.linkable:hover { color: var(--link-color); text-decoration: underline; }
+.history-item-author { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-item-date { flex-shrink: 0; color: var(--text-muted); }
+#history-right {
+  flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden;
+}
+#history-preview {
+  flex: 1; overflow-y: auto; min-width: 0;
+  background: var(--bg-primary);
+}
+#history-preview-content {
+  max-width: 860px; margin: 0 auto; padding: 32px;
+}
+
+/* ===== Diff Toolbar ===== */
+#diff-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary); flex-shrink: 0; gap: 12px;
+}
+#diff-toolbar-left { display: flex; align-items: center; gap: 10px; }
+#diff-controls { display: flex; align-items: center; gap: 10px; }
+#diff-vs-working {
+  display: flex; align-items: center; gap: 4px; font-size: 12px;
+  color: var(--text-secondary); cursor: pointer; user-select: none;
+}
+#diff-vs-working input { cursor: pointer; }
+#diff-stats {
+  font-size: 12px; font-weight: 600; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  white-space: nowrap;
+}
+.diff-stat-add { color: #3fb950; }
+.diff-stat-del { color: #f85149; }
+
+/* ===== Diff View ===== */
+#diff-view {
+  flex: 1; overflow: hidden; min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px; line-height: 1.5;
+}
+#diff-split {
+  display: flex; height: 100%;
+}
+.diff-pane {
+  flex: 1; overflow-y: auto; overflow-x: auto;
+  border-right: 1px solid var(--border-color);
+}
+.diff-pane:last-child { border-right: none; }
+#diff-unified {
+  overflow-y: auto; height: 100%;
+}
+
+/* Diff lines */
+.diff-line {
+  display: flex; white-space: pre; min-height: 20px;
+}
+.diff-line-num {
+  width: 48px; min-width: 48px; text-align: right; padding: 0 8px;
+  color: var(--text-muted); user-select: none; opacity: 0.6; flex-shrink: 0;
+}
+.diff-line-content {
+  flex: 1; padding: 0 12px; min-width: 0;
+}
+.diff-line-prefix {
+  display: inline-block; width: 16px; user-select: none; color: var(--text-muted);
+}
+
+/* Diff line colors — light themes */
+[data-theme$="-light"] .diff-line.insert { background: #dafbe1; }
+[data-theme$="-light"] .diff-line.insert .diff-line-num { background: #ccffd8; }
+[data-theme$="-light"] .diff-line.delete { background: #ffebe9; }
+[data-theme$="-light"] .diff-line.delete .diff-line-num { background: #ffd7d5; }
+
+/* Diff line colors — dark themes */
+[data-theme$="-dark"] .diff-line.insert { background: rgba(63, 185, 80, 0.15); }
+[data-theme$="-dark"] .diff-line.insert .diff-line-num { background: rgba(63, 185, 80, 0.25); }
+[data-theme$="-dark"] .diff-line.delete { background: rgba(248, 81, 73, 0.15); }
+[data-theme$="-dark"] .diff-line.delete .diff-line-num { background: rgba(248, 81, 73, 0.25); }
+
+/* Unified diff has two line number columns */
+.diff-line-num-old, .diff-line-num-new {
+  width: 48px; min-width: 48px; text-align: right; padding: 0 8px;
+  color: var(--text-muted); user-select: none; opacity: 0.6; flex-shrink: 0;
+}
+[data-theme$="-light"] .diff-line.insert .diff-line-num-old,
+[data-theme$="-light"] .diff-line.insert .diff-line-num-new { background: #ccffd8; }
+[data-theme$="-light"] .diff-line.delete .diff-line-num-old,
+[data-theme$="-light"] .diff-line.delete .diff-line-num-new { background: #ffd7d5; }
+[data-theme$="-dark"] .diff-line.insert .diff-line-num-old,
+[data-theme$="-dark"] .diff-line.insert .diff-line-num-new { background: rgba(63, 185, 80, 0.25); }
+[data-theme$="-dark"] .diff-line.delete .diff-line-num-old,
+[data-theme$="-dark"] .diff-line.delete .diff-line-num-new { background: rgba(248, 81, 73, 0.25); }
+
+/* ===== Commit Popover ===== */
+#commit-popover {
+  position: fixed; top: 48px; right: 120px; z-index: 150;
+  width: 320px; background: var(--modal-bg); border: 1px solid var(--border-color);
+  border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  padding: 0; overflow: hidden;
+}
+.commit-popover-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; font-size: 13px; font-weight: 600;
+  border-bottom: 1px solid var(--border-color); color: var(--text-primary);
+}
+#commit-message {
+  width: 100%; border: none; padding: 10px 12px; font-size: 13px;
+  font-family: inherit; background: transparent; color: var(--text-primary);
+  outline: none; box-sizing: border-box;
+}
+#commit-message::placeholder { color: var(--text-muted); }
+.commit-popover-actions {
+  display: flex; justify-content: flex-end; padding: 8px 12px;
+  border-top: 1px solid var(--border-color);
+}
+.commit-btn {
+  padding: 5px 16px; font-size: 12px; font-weight: 600;
+  border: none; border-radius: 6px; cursor: pointer; font-family: inherit;
+  background: var(--seg-active-bg); color: var(--seg-active-text);
+  transition: opacity 0.1s;
+}
+.commit-btn:hover { opacity: 0.85; }
+.commit-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* ===== Auth Modal ===== */
+#auth-overlay {
+  position: fixed; inset: 0; background: var(--modal-overlay);
+  z-index: 200; display: flex; align-items: center; justify-content: center;
+}
+#auth-modal {
+  background: var(--modal-bg); border: 1px solid var(--border-color);
+  border-radius: 12px; width: 380px; overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.25);
+}
+#auth-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--border-color);
+}
+#auth-header h2 { font-size: 15px; font-weight: 600; }
+#auth-body { padding: 20px; }
+#auth-instructions {
+  font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.5;
+}
+#auth-instructions code {
+  background: var(--bg-secondary); padding: 1px 5px; border-radius: 4px;
+  font-size: 12px; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+#auth-token-input {
+  width: 100%; padding: 10px 12px; font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  border: 1px solid var(--border-color); border-radius: 8px;
+  background: var(--bg-secondary); color: var(--text-primary);
+  outline: none; box-sizing: border-box;
+}
+#auth-token-input:focus { border-color: var(--seg-active-bg); }
+#auth-token-input::placeholder { color: var(--text-muted); }
+#auth-token-actions {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 12px; gap: 8px;
+}
+#auth-token-actions .sidebar-action-btn { flex: none; font-size: 12px; padding: 6px 12px; }
+#auth-status-msg {
+  font-size: 12px; margin-top: 10px; min-height: 16px;
+}
+#auth-status-msg.error { color: #f85149; }
+#auth-status-msg.success { color: #3fb950; }
+
+#auth-signed-in { padding: 20px; text-align: center; }
+#auth-user-info {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;
+}
+
+/* Auth dot indicator */
+.auth-dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: #3fb950; margin-left: 2px; vertical-align: middle;
+}
 
 /* ===== Error Display ===== */
 .error-message {
