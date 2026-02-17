@@ -1,5 +1,31 @@
 # MRE Release History
 
+## v0.1.7
+
+**Text-to-Speech: Read Aloud**
+
+### Read Aloud
+- Read any markdown document aloud with Cmd+T or the toolbar speaker button
+- Three TTS providers: OpenAI, Google Cloud, and ElevenLabs
+- Markdown-aware text extraction: headings, paragraphs, lists, links (reads link text, skips URLs), block quotes, tables — all read naturally
+- Code blocks optionally read or replaced with "Code block." (configurable)
+- Chunked streaming: first chunk plays immediately, remaining chunks generate in background
+- Player bar with play/pause, progress scrubbing, chunk counter, and stop button
+- Cancellable generation — stop mid-document and audio generation halts server-side
+
+### TTS Settings
+- Provider selection with voice picker (auto-loads available voices per provider)
+- Speed control slider (0.5x to 2.0x)
+- Read Code Blocks toggle
+- Per-provider API key management with save/remove and green dot status indicators
+- Keys persisted securely in app data directory
+
+### Dependencies
+- Added `base64` for audio data encoding/decoding
+- CSP updated to allow `blob:` media sources for audio playback
+
+---
+
 ## v0.1.6
 
 **Git Integration, Editor Line Numbers, and Settings Enhancements**

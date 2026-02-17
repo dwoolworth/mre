@@ -802,3 +802,63 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
 [data-theme$="-light"] .hljs-addition { color: #116329; background: #dafbe1; }
 [data-theme$="-light"] .hljs-function { color: #8250df; }
 [data-theme$="-light"] .hljs-params { color: #24292f; }
+
+/* ===== TTS Player Bar ===== */
+#tts-player {
+  position: sticky; bottom: 0; left: 0; right: 0; height: 48px; flex-shrink: 0;
+  background: var(--toolbar-bg); border-top: 1px solid var(--border-color);
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 12px; z-index: 20;
+}
+#tts-progress-wrapper {
+  flex: 1; height: 6px; background: var(--border-color);
+  border-radius: 3px; overflow: hidden; cursor: pointer;
+}
+#tts-progress-bar {
+  height: 100%; width: 0%; background: var(--seg-active-bg);
+  border-radius: 3px; transition: width 0.15s linear;
+}
+#tts-chunk-info {
+  font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums;
+  white-space: nowrap; min-width: 40px; text-align: center;
+}
+
+/* ===== TTS Key Modal ===== */
+#tts-key-overlay {
+  position: fixed; inset: 0; background: var(--modal-overlay);
+  z-index: 200; display: flex; align-items: center; justify-content: center;
+}
+#tts-key-modal {
+  background: var(--modal-bg); border: 1px solid var(--border-color);
+  border-radius: 12px; width: 380px; overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.25);
+}
+#tts-key-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--border-color);
+}
+#tts-key-header h2 { font-size: 15px; font-weight: 600; }
+#tts-key-body { padding: 20px; }
+#tts-key-instructions {
+  font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.5;
+}
+#tts-key-input {
+  width: 100%; padding: 10px 12px; font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  border: 1px solid var(--border-color); border-radius: 8px;
+  background: var(--bg-secondary); color: var(--text-primary);
+  outline: none; box-sizing: border-box;
+}
+#tts-key-input:focus { border-color: var(--seg-active-bg); }
+#tts-key-input::placeholder { color: var(--text-muted); }
+#tts-key-actions {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 12px; gap: 8px;
+}
+#tts-key-actions .sidebar-action-btn { font-size: 12px; padding: 6px 12px; }
+
+/* TTS key status dot */
+.tts-key-dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: #3fb950; margin-left: 4px; vertical-align: middle;
+}

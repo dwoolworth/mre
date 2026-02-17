@@ -48,6 +48,11 @@
             <path d="M1.5 8a6.5 6.5 0 1 1 13 0 6.5 6.5 0 0 1-13 0zM8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm.5 4.75a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 .37.65l2.5 1.5a.75.75 0 1 0 .76-1.3L8.5 7.96V4.75z"/>
           </svg>
         </button>
+        <button id="btn-tts" class="toolbar-btn" title="Read Aloud (Cmd+T)" style="display: none;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8.75 1.75a.75.75 0 00-1.5 0v.5A4.25 4.25 0 003 6.5v1a4.25 4.25 0 004.25 4.25V14H5.5a.75.75 0 000 1.5h5a.75.75 0 000-1.5H8.75v-2.25A4.25 4.25 0 0013 7.5v-1A4.25 4.25 0 008.75 2.25v-.5zM4.5 6.5A3.25 3.25 0 017.75 3.25h.5A3.25 3.25 0 0111.5 6.5v1a3.25 3.25 0 01-3.25 3.25h-.5A3.25 3.25 0 014.5 7.5v-1z"/>
+          </svg>
+        </button>
         <button id="btn-edit" class="toolbar-btn" title="Edit document" style="display: none;">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M11.013 1.427a1.75 1.75 0 012.474 0l1.086 1.086a1.75 1.75 0 010 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 01-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61zM12.259 2.8a.25.25 0 00-.354 0L10.78 3.926l1.293 1.293 1.126-1.126a.25.25 0 000-.354L12.26 2.8zM3.28 12.72l6.44-6.44-1.293-1.293-6.44 6.44a.25.25 0 00-.065.108l-.63 2.206 2.206-.63a.25.25 0 00.108-.065z"/>
@@ -162,6 +167,26 @@
               <div id="diff-unified"></div>
             </div>
           </div>
+        </div>
+        <!-- TTS Player Bar -->
+        <div id="tts-player" style="display: none;">
+          <button id="tts-play-pause" class="toolbar-btn" title="Play/Pause">
+            <svg id="tts-icon-play" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M4 2.5v11l9-5.5L4 2.5z"/>
+            </svg>
+            <svg id="tts-icon-pause" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: none;">
+              <path d="M4.5 2h2v12h-2V2zm5 0h2v12h-2V2z"/>
+            </svg>
+          </button>
+          <div id="tts-progress-wrapper">
+            <div id="tts-progress-bar"></div>
+          </div>
+          <span id="tts-chunk-info">0 / 0</span>
+          <button id="tts-stop" class="toolbar-btn" title="Stop">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+              <rect x="3" y="3" width="10" height="10" rx="1"/>
+            </svg>
+          </button>
         </div>
       </div>
     </div>
@@ -296,6 +321,65 @@
             <button id="btn-reset-all-colors" class="sidebar-action-btn" style="max-width: 200px;">Reset All to Defaults</button>
           </div>
 
+          <!-- Text-to-Speech Section -->
+          <div class="setting-section-label">Text-to-Speech</div>
+
+          <div class="setting-row bordered">
+            <span class="setting-row-label">Provider</span>
+            <select id="setting-tts-provider">
+              <option value="openai">OpenAI</option>
+              <option value="google">Google Cloud</option>
+              <option value="elevenlabs">ElevenLabs</option>
+            </select>
+          </div>
+
+          <div class="setting-row bordered">
+            <span class="setting-row-label">Voice</span>
+            <select id="setting-tts-voice">
+              <option value="alloy">Alloy</option>
+            </select>
+          </div>
+
+          <div class="setting-row bordered">
+            <span class="setting-row-label">Speed</span>
+            <div class="slider-group">
+              <span id="setting-tts-speed-value" class="slider-value">1.0x</span>
+              <input type="range" id="setting-tts-speed" min="0.5" max="2.0" value="1.0" step="0.1" />
+            </div>
+          </div>
+
+          <div class="setting-row bordered">
+            <span class="setting-row-label">Read Code Blocks</span>
+            <label class="toggle">
+              <input type="checkbox" id="setting-tts-read-code" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-row bordered">
+            <span class="setting-row-label">
+              OpenAI Key
+              <span id="tts-key-dot-openai" class="tts-key-dot" style="display: none;"></span>
+            </span>
+            <button id="btn-tts-key-openai" class="sidebar-action-btn" style="flex: none; max-width: 140px;">Set Key</button>
+          </div>
+
+          <div class="setting-row bordered">
+            <span class="setting-row-label">
+              Google Key
+              <span id="tts-key-dot-google" class="tts-key-dot" style="display: none;"></span>
+            </span>
+            <button id="btn-tts-key-google" class="sidebar-action-btn" style="flex: none; max-width: 140px;">Set Key</button>
+          </div>
+
+          <div class="setting-row bordered">
+            <span class="setting-row-label">
+              ElevenLabs Key
+              <span id="tts-key-dot-elevenlabs" class="tts-key-dot" style="display: none;"></span>
+            </span>
+            <button id="btn-tts-key-elevenlabs" class="sidebar-action-btn" style="flex: none; max-width: 140px;">Set Key</button>
+          </div>
+
           <!-- GitHub Section -->
           <div class="setting-section-label">GitHub</div>
 
@@ -320,6 +404,28 @@
       <input type="text" id="commit-message" placeholder="Commit message..." maxlength="200" />
       <div class="commit-popover-actions">
         <button id="btn-confirm-commit" class="commit-btn">Commit</button>
+      </div>
+    </div>
+
+    <!-- TTS Key Modal -->
+    <div id="tts-key-overlay" style="display: none;">
+      <div id="tts-key-modal">
+        <div id="tts-key-header">
+          <h2 id="tts-key-title">Set API Key</h2>
+          <button id="btn-close-tts-key" class="toolbar-btn">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.749.749 0 011.275.326.749.749 0 01-.215.734L9.06 8l3.22 3.22a.749.749 0 01-.326 1.275.749.749 0 01-.734-.215L8 9.06l-3.22 3.22a.751.751 0 01-1.042-.018.751.751 0 01-.018-1.042L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/>
+            </svg>
+          </button>
+        </div>
+        <div id="tts-key-body">
+          <p id="tts-key-instructions"></p>
+          <input type="password" id="tts-key-input" placeholder="Paste API key..." spellcheck="false" autocomplete="off" />
+          <div id="tts-key-actions">
+            <button id="btn-tts-key-remove" class="sidebar-action-btn" style="flex: none;">Remove Key</button>
+            <button id="btn-tts-key-save" class="commit-btn">Save Key</button>
+          </div>
+        </div>
       </div>
     </div>
 

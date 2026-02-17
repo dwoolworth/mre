@@ -5,6 +5,7 @@ mod github_auth;
 mod markdown;
 mod pdf_export;
 mod state;
+mod tts;
 mod typst_convert;
 mod watcher;
 
@@ -49,6 +50,12 @@ pub fn run() {
             github_auth::github_auth_status,
             github_auth::github_auth_save_token,
             github_auth::github_auth_logout,
+            tts::tts_save_key,
+            tts::tts_remove_key,
+            tts::tts_key_status,
+            tts::tts_generate,
+            tts::tts_cancel,
+            tts::tts_list_voices,
         ])
         .setup(|app| {
             // Set app data dir and load saved GitHub token
@@ -58,6 +65,7 @@ pub fn run() {
                 *dir = Some(data_dir);
                 drop(dir);
                 github_auth::load_saved_token(&state);
+                tts::load_saved_tts_keys(&state);
             }
 
             // Check CLI args for a file path
@@ -99,6 +107,10 @@ pub fn run() {
                 .id("file_history")
                 .accelerator("Cmd+Shift+H")
                 .build(app)?;
+            let read_aloud = MenuItemBuilder::new("Read Aloud")
+                .id("read_aloud")
+                .accelerator("Cmd+T")
+                .build(app)?;
 
             let about = AboutMetadata {
                 name: Some("Markdown Read & Edit".into()),
@@ -138,6 +150,7 @@ pub fn run() {
                 .item(&export_pdf)
                 .separator()
                 .item(&file_history)
+                .item(&read_aloud)
                 .separator()
                 .close_window()
                 .build()?;
@@ -191,6 +204,9 @@ pub fn run() {
                     }
                     "file_history" => {
                         let _ = app_handle.emit("menu-file-history", ());
+                    }
+                    "read_aloud" => {
+                        let _ = app_handle.emit("menu-read-aloud", ());
                     }
                     _ => {}
                 }
