@@ -28,6 +28,22 @@ let historyCommits = [];
 let authStatus = { authenticated: false, username: null };
 let commitPopoverOpen = false;
 
+// TTS state
+let ttsSettings = {
+  provider: localStorage.getItem("md-tts-provider") || "openai",
+  voice: localStorage.getItem("md-tts-voice") || "alloy",
+  speed: parseFloat(localStorage.getItem("md-tts-speed")) || 1.0,
+  readCodeBlocks: localStorage.getItem("md-tts-read-code") === "true",
+};
+let ttsPlaying = false;
+let ttsPaused = false;
+let ttsAudioQueue = [];
+let ttsCurrentChunkIndex = 0;
+let ttsTotalChunks = 0;
+let ttsAudioElement = null;
+let ttsKeyStatus = { openai: false, google: false, elevenlabs: false };
+let ttsKeyModalProvider = null;
+
 // Settings — now split into colorScheme + themeName
 let settings = {
   colorScheme: localStorage.getItem("md-color-scheme") || "dark",
@@ -117,6 +133,25 @@ window.addEventListener("DOMContentLoaded", async () => {
     gitAuthDot: document.getElementById("git-auth-dot"),
     settingsGithubLabel: document.getElementById("settings-github-label"),
     btnSettingsGithub: document.getElementById("btn-settings-github"),
+    // TTS
+    btnTts: document.getElementById("btn-tts"),
+    ttsPlayer: document.getElementById("tts-player"),
+    ttsPlayPause: document.getElementById("tts-play-pause"),
+    ttsIconPlay: document.getElementById("tts-icon-play"),
+    ttsIconPause: document.getElementById("tts-icon-pause"),
+    ttsProgressWrapper: document.getElementById("tts-progress-wrapper"),
+    ttsProgressBar: document.getElementById("tts-progress-bar"),
+    ttsChunkInfo: document.getElementById("tts-chunk-info"),
+    ttsStop: document.getElementById("tts-stop"),
+    settingTtsProvider: document.getElementById("setting-tts-provider"),
+    settingTtsVoice: document.getElementById("setting-tts-voice"),
+    settingTtsSpeed: document.getElementById("setting-tts-speed"),
+    settingTtsSpeedValue: document.getElementById("setting-tts-speed-value"),
+    settingTtsReadCode: document.getElementById("setting-tts-read-code"),
+    ttsKeyOverlay: document.getElementById("tts-key-overlay"),
+    ttsKeyTitle: document.getElementById("tts-key-title"),
+    ttsKeyInstructions: document.getElementById("tts-key-instructions"),
+    ttsKeyInput: document.getElementById("tts-key-input"),
   };
 
   // Apply all settings
@@ -270,6 +305,55 @@ window.addEventListener("DOMContentLoaded", async () => {
     e.stopPropagation();
     openAuthModal();
   });
+
+  // TTS controls
+  els.btnTts.addEventListener("click", toggleTts);
+  els.ttsPlayPause.addEventListener("click", ttsTogglePlayPause);
+  els.ttsStop.addEventListener("click", ttsStopPlayback);
+  els.ttsProgressWrapper.addEventListener("click", (e) => {
+    if (!ttsAudioElement) return;
+    const rect = els.ttsProgressWrapper.getBoundingClientRect();
+    const pct = (e.clientX - rect.left) / rect.width;
+    ttsAudioElement.currentTime = pct * ttsAudioElement.duration;
+  });
+
+  // TTS settings
+  els.settingTtsProvider.value = ttsSettings.provider;
+  els.settingTtsProvider.addEventListener("change", (e) => {
+    ttsSettings.provider = e.target.value;
+    localStorage.setItem("md-tts-provider", ttsSettings.provider);
+    loadTtsVoices();
+  });
+  els.settingTtsVoice.addEventListener("change", (e) => {
+    ttsSettings.voice = e.target.value;
+    localStorage.setItem("md-tts-voice", ttsSettings.voice);
+  });
+  els.settingTtsSpeed.value = ttsSettings.speed;
+  els.settingTtsSpeedValue.textContent = `${ttsSettings.speed.toFixed(1)}x`;
+  els.settingTtsSpeed.addEventListener("input", (e) => {
+    ttsSettings.speed = parseFloat(e.target.value);
+    els.settingTtsSpeedValue.textContent = `${ttsSettings.speed.toFixed(1)}x`;
+    localStorage.setItem("md-tts-speed", ttsSettings.speed.toString());
+  });
+  els.settingTtsReadCode.checked = ttsSettings.readCodeBlocks;
+  els.settingTtsReadCode.addEventListener("change", (e) => {
+    ttsSettings.readCodeBlocks = e.target.checked;
+    localStorage.setItem("md-tts-read-code", ttsSettings.readCodeBlocks.toString());
+  });
+
+  // TTS key buttons
+  document.getElementById("btn-tts-key-openai").addEventListener("click", () => openTtsKeyModal("openai"));
+  document.getElementById("btn-tts-key-google").addEventListener("click", () => openTtsKeyModal("google"));
+  document.getElementById("btn-tts-key-elevenlabs").addEventListener("click", () => openTtsKeyModal("elevenlabs"));
+  document.getElementById("btn-close-tts-key").addEventListener("click", closeTtsKeyModal);
+  els.ttsKeyOverlay.addEventListener("click", (e) => {
+    if (e.target === els.ttsKeyOverlay) closeTtsKeyModal();
+  });
+  document.getElementById("btn-tts-key-save").addEventListener("click", saveTtsKey);
+  document.getElementById("btn-tts-key-remove").addEventListener("click", removeTtsKey);
+  els.ttsKeyInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") saveTtsKey();
+  });
   // Close commit popover on outside click
   document.addEventListener("click", (e) => {
     if (commitPopoverOpen && !els.commitPopover.contains(e.target) && !els.btnCommit.contains(e.target)) {
@@ -310,6 +394,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       e.preventDefault();
       settings.fontSize = 16;
       applyFontSize();
+    } else if (mod && e.key === "t") {
+      e.preventDefault();
+      toggleTts();
     } else if (mod && e.key === "b") {
       e.preventDefault();
       toggleSidebar();
@@ -379,6 +466,28 @@ window.addEventListener("DOMContentLoaded", async () => {
   await listen("menu-file-history", () => {
     if (currentPath) toggleHistory();
   });
+  await listen("menu-read-aloud", () => {
+    if (currentPath) toggleTts();
+  });
+
+  // TTS events
+  await listen("tts-chunk-ready", (event) => {
+    const { chunkIndex, totalChunks, audioBase64 } = event.payload;
+    ttsAudioQueue[chunkIndex] = audioBase64;
+    // If we were waiting for this chunk, play it
+    if (ttsPlaying && !ttsPaused && !ttsAudioElement && ttsCurrentChunkIndex === chunkIndex) {
+      playTtsChunk(chunkIndex);
+    }
+  });
+  await listen("tts-generation-error", (event) => {
+    const prevTitle = els.toolbarTitle.textContent;
+    els.toolbarTitle.textContent = "TTS Error: " + (event.payload || "Unknown error");
+    setTimeout(() => { els.toolbarTitle.textContent = prevTitle; }, 3000);
+  });
+
+  // Load TTS key status and voices on startup
+  refreshTtsKeyStatus();
+  loadTtsVoices();
 
   // Check for initial file
   try {
@@ -503,10 +612,12 @@ async function openFile(path) {
       els.content.style.display = "none";
       els.btnEdit.style.display = "none";
       els.btnExportPdf.style.display = "none";
+      els.btnTts.style.display = "none";
     } else {
       els.content.style.display = "block";
       els.btnExportPdf.style.display = "";
       els.btnEdit.style.display = "";
+      els.btnTts.style.display = "";
     }
 
     // Mark active in sidebar
@@ -739,6 +850,7 @@ async function enterEditMode() {
     els.btnEdit.style.display = "none";
     els.btnSave.style.display = "";
     els.btnExportPdf.style.display = "none";
+    els.btnTts.style.display = "none";
     editMode = true;
     updateEditorLineNumbers();
     els.editor.focus();
@@ -753,6 +865,7 @@ function exitEditMode() {
   els.btnSave.style.display = "none";
   els.btnEdit.style.display = "";
   els.btnExportPdf.style.display = "";
+  els.btnTts.style.display = "";
   editMode = false;
 }
 
@@ -1310,6 +1423,7 @@ function exitHistory() {
   if (currentPath) {
     els.btnEdit.style.display = "";
     els.btnExportPdf.style.display = "";
+    els.btnTts.style.display = "";
   }
 }
 
@@ -1509,6 +1623,274 @@ async function doLogout() {
     els.authStatusMsg.className = "";
   } catch (e) {
     alert("Logout failed: " + e);
+  }
+}
+
+// ===== TTS =====
+async function toggleTts() {
+  if (ttsPlaying) {
+    ttsStopPlayback();
+  } else {
+    startTts();
+  }
+}
+
+async function startTts() {
+  if (!currentPath || editMode) return;
+
+  try {
+    const markdown = await invoke("read_file_content", { path: currentPath });
+    if (!markdown || !markdown.trim()) return;
+
+    const prevTitle = els.toolbarTitle.textContent;
+    els.toolbarTitle.textContent = "Generating audio...";
+
+    ttsAudioQueue = [];
+    ttsCurrentChunkIndex = 0;
+    ttsTotalChunks = 0;
+    ttsPlaying = true;
+    ttsPaused = false;
+
+    const config = {
+      provider: ttsSettings.provider,
+      voice: ttsSettings.voice,
+      speed: ttsSettings.speed,
+      readCodeBlocks: ttsSettings.readCodeBlocks,
+      languageCode: "en-US",
+      model: ttsSettings.provider === "openai" ? "tts-1" : null,
+    };
+
+    const result = await invoke("tts_generate", { markdown, config });
+    els.toolbarTitle.textContent = prevTitle;
+
+    ttsTotalChunks = result.totalChunks;
+    ttsAudioQueue[0] = result.audioBase64;
+
+    // Show player bar
+    els.ttsPlayer.style.display = "flex";
+    els.ttsChunkInfo.textContent = `1 / ${ttsTotalChunks}`;
+    updateTtsPlayPauseIcon();
+
+    // Start playing
+    playTtsChunk(0);
+  } catch (err) {
+    ttsPlaying = false;
+    const prevTitle = els.toolbarTitle.textContent;
+    els.toolbarTitle.textContent = "TTS: " + err;
+    setTimeout(() => {
+      if (currentPath) {
+        els.toolbarTitle.textContent = currentPath.split(/[/\\]/).pop();
+      }
+    }, 3000);
+  }
+}
+
+function playTtsChunk(index) {
+  if (!ttsPlaying || index >= ttsTotalChunks) {
+    // Playback complete
+    ttsFinished();
+    return;
+  }
+
+  const audioData = ttsAudioQueue[index];
+  if (!audioData) {
+    // Chunk not ready yet — will be played when tts-chunk-ready fires
+    ttsAudioElement = null;
+    return;
+  }
+
+  ttsCurrentChunkIndex = index;
+  els.ttsChunkInfo.textContent = `${index + 1} / ${ttsTotalChunks}`;
+
+  const blob = base64ToBlob(audioData, "audio/mpeg");
+  const url = URL.createObjectURL(blob);
+
+  ttsAudioElement = new Audio(url);
+  ttsAudioElement.playbackRate = 1.0; // Speed handled server-side for OpenAI
+
+  ttsAudioElement.addEventListener("timeupdate", updateTtsProgress);
+  ttsAudioElement.addEventListener("ended", () => {
+    URL.revokeObjectURL(url);
+    ttsAudioElement = null;
+    playTtsChunk(index + 1);
+  });
+  ttsAudioElement.addEventListener("error", () => {
+    URL.revokeObjectURL(url);
+    ttsAudioElement = null;
+    ttsFinished();
+  });
+
+  ttsAudioElement.play().catch(() => {
+    ttsFinished();
+  });
+}
+
+function ttsTogglePlayPause() {
+  if (!ttsPlaying || !ttsAudioElement) return;
+
+  if (ttsPaused) {
+    ttsAudioElement.play();
+    ttsPaused = false;
+  } else {
+    ttsAudioElement.pause();
+    ttsPaused = true;
+  }
+  updateTtsPlayPauseIcon();
+}
+
+function updateTtsPlayPauseIcon() {
+  if (ttsPaused) {
+    els.ttsIconPlay.style.display = "";
+    els.ttsIconPause.style.display = "none";
+  } else {
+    els.ttsIconPlay.style.display = "none";
+    els.ttsIconPause.style.display = "";
+  }
+}
+
+async function ttsStopPlayback() {
+  ttsPlaying = false;
+  ttsPaused = false;
+  if (ttsAudioElement) {
+    ttsAudioElement.pause();
+    ttsAudioElement = null;
+  }
+  ttsAudioQueue = [];
+  els.ttsPlayer.style.display = "none";
+  els.ttsProgressBar.style.width = "0%";
+
+  try {
+    await invoke("tts_cancel");
+  } catch (_) {}
+}
+
+function ttsFinished() {
+  ttsPlaying = false;
+  ttsPaused = false;
+  ttsAudioElement = null;
+  els.ttsProgressBar.style.width = "100%";
+  setTimeout(() => {
+    els.ttsPlayer.style.display = "none";
+    els.ttsProgressBar.style.width = "0%";
+  }, 1000);
+}
+
+function updateTtsProgress() {
+  if (!ttsAudioElement || !ttsPlaying) return;
+  const chunkProgress = ttsAudioElement.duration
+    ? ttsAudioElement.currentTime / ttsAudioElement.duration
+    : 0;
+  const overallProgress =
+    ((ttsCurrentChunkIndex + chunkProgress) / ttsTotalChunks) * 100;
+  els.ttsProgressBar.style.width = `${overallProgress}%`;
+}
+
+function base64ToBlob(base64, mimeType) {
+  const bytes = atob(base64);
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) {
+    arr[i] = bytes.charCodeAt(i);
+  }
+  return new Blob([arr], { type: mimeType });
+}
+
+// ===== TTS Settings =====
+async function refreshTtsKeyStatus() {
+  try {
+    ttsKeyStatus = await invoke("tts_key_status");
+    updateTtsKeyDots();
+  } catch (_) {}
+}
+
+function updateTtsKeyDots() {
+  const dotOpenai = document.getElementById("tts-key-dot-openai");
+  const dotGoogle = document.getElementById("tts-key-dot-google");
+  const dotElevenlabs = document.getElementById("tts-key-dot-elevenlabs");
+  if (dotOpenai) dotOpenai.style.display = ttsKeyStatus.openai ? "" : "none";
+  if (dotGoogle) dotGoogle.style.display = ttsKeyStatus.google ? "" : "none";
+  if (dotElevenlabs) dotElevenlabs.style.display = ttsKeyStatus.elevenlabs ? "" : "none";
+
+  // Update key button text
+  const btnOpenai = document.getElementById("btn-tts-key-openai");
+  const btnGoogle = document.getElementById("btn-tts-key-google");
+  const btnElevenlabs = document.getElementById("btn-tts-key-elevenlabs");
+  if (btnOpenai) btnOpenai.textContent = ttsKeyStatus.openai ? "Manage" : "Set Key";
+  if (btnGoogle) btnGoogle.textContent = ttsKeyStatus.google ? "Manage" : "Set Key";
+  if (btnElevenlabs) btnElevenlabs.textContent = ttsKeyStatus.elevenlabs ? "Manage" : "Set Key";
+}
+
+function openTtsKeyModal(provider) {
+  ttsKeyModalProvider = provider;
+  const labels = {
+    openai: "OpenAI",
+    google: "Google Cloud",
+    elevenlabs: "ElevenLabs",
+  };
+  const instructions = {
+    openai: "Enter your OpenAI API key. You can create one at platform.openai.com/api-keys.",
+    google: "Enter your Google Cloud API key with Text-to-Speech API enabled.",
+    elevenlabs: "Enter your ElevenLabs API key from elevenlabs.io/app/settings/api-keys.",
+  };
+  els.ttsKeyTitle.textContent = `${labels[provider]} API Key`;
+  els.ttsKeyInstructions.textContent = instructions[provider];
+  els.ttsKeyInput.value = "";
+  els.ttsKeyOverlay.style.display = "flex";
+  els.ttsKeyInput.focus();
+}
+
+function closeTtsKeyModal() {
+  els.ttsKeyOverlay.style.display = "none";
+  ttsKeyModalProvider = null;
+}
+
+async function saveTtsKey() {
+  if (!ttsKeyModalProvider) return;
+  const key = els.ttsKeyInput.value.trim();
+  if (!key) return;
+
+  try {
+    await invoke("tts_save_key", { provider: ttsKeyModalProvider, key });
+    closeTtsKeyModal();
+    refreshTtsKeyStatus();
+    loadTtsVoices();
+  } catch (err) {
+    alert("Failed to save key: " + err);
+  }
+}
+
+async function removeTtsKey() {
+  if (!ttsKeyModalProvider) return;
+  try {
+    await invoke("tts_remove_key", { provider: ttsKeyModalProvider });
+    closeTtsKeyModal();
+    refreshTtsKeyStatus();
+  } catch (err) {
+    alert("Failed to remove key: " + err);
+  }
+}
+
+async function loadTtsVoices() {
+  try {
+    const voices = await invoke("tts_list_voices", { provider: ttsSettings.provider });
+    els.settingTtsVoice.innerHTML = "";
+    for (const v of voices) {
+      const opt = document.createElement("option");
+      opt.value = v.id;
+      opt.textContent = v.name;
+      els.settingTtsVoice.appendChild(opt);
+    }
+    // Restore saved voice if it's in the list
+    const savedVoice = ttsSettings.voice;
+    const exists = voices.some((v) => v.id === savedVoice);
+    if (exists) {
+      els.settingTtsVoice.value = savedVoice;
+    } else if (voices.length > 0) {
+      els.settingTtsVoice.value = voices[0].id;
+      ttsSettings.voice = voices[0].id;
+      localStorage.setItem("md-tts-voice", ttsSettings.voice);
+    }
+  } catch (_) {
+    // Provider key may not be set — that's fine
   }
 }
 
