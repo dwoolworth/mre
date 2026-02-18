@@ -65,6 +65,12 @@ let settings = {
 
 // Folder tree data
 let folderTree = [];
+let currentFolderPath = null;
+
+// Navigation history
+let navHistory = [];
+let navIndex = -1;
+let navNavigating = false; // flag to prevent pushing during back/forward
 
 // ===== DOM References =====
 let els = {};
@@ -78,6 +84,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     fileTree: document.getElementById("file-tree"),
     filterInput: document.getElementById("filter-input"),
     contentArea: document.getElementById("content-area"),
+    contentScroll: document.getElementById("content-scroll"),
+    btnNavBack: document.getElementById("btn-nav-back"),
+    btnNavForward: document.getElementById("btn-nav-forward"),
+    btnNavHome: document.getElementById("btn-nav-home"),
+    btnNavRefresh: document.getElementById("btn-nav-refresh"),
     content: document.getElementById("content"),
     editorContainer: document.getElementById("editor-container"),
     editorLineNumbers: document.getElementById("editor-line-numbers"),
@@ -367,7 +378,14 @@ window.addEventListener("DOMContentLoaded", async () => {
   // ===== Sidebar buttons =====
   document.getElementById("btn-open-folder").addEventListener("click", openFolderDialog);
   document.getElementById("btn-open-file").addEventListener("click", openFileDialog);
+  document.getElementById("btn-refresh-folder").addEventListener("click", refreshFolder);
   document.getElementById("btn-favorites-filter").addEventListener("click", toggleFavoritesFilter);
+
+  // ===== Nav bar buttons =====
+  els.btnNavBack.addEventListener("click", navBack);
+  els.btnNavForward.addEventListener("click", navForward);
+  els.btnNavHome.addEventListener("click", navHome);
+  els.btnNavRefresh.addEventListener("click", navRefresh);
 
   // ===== Filter input =====
   els.filterInput.addEventListener("input", (e) => {
@@ -435,10 +453,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   // ===== Tauri events =====
   await listen("file-changed", async () => {
     if (currentPath && !editMode) {
-      const scrollTop = els.contentArea.scrollTop;
+      const scrollTop = els.contentScroll.scrollTop;
       await openFile(currentPath);
       requestAnimationFrame(() => {
-        els.contentArea.scrollTop = scrollTop;
+        els.contentScroll.scrollTop = scrollTop;
       });
     }
   });
@@ -593,6 +611,18 @@ function toHex(color) {
   return "#000000";
 }
 
+// ===== Path Helpers =====
+function resolvePath(path) {
+  const parts = path.split("/");
+  const resolved = [];
+  for (const part of parts) {
+    if (part === "." || part === "") continue;
+    if (part === "..") { resolved.pop(); }
+    else { resolved.push(part); }
+  }
+  return "/" + resolved.join("/");
+}
+
 // ===== File Operations =====
 async function openFile(path) {
   try {
@@ -601,6 +631,20 @@ async function openFile(path) {
 
     const result = await invoke("open_and_render", { path });
     currentPath = result.filePath;
+
+    // Track navigation history (skip duplicates and re-renders of the same file)
+    if (!navNavigating && result.filePath && navHistory[navIndex] !== result.filePath) {
+      navHistory = navHistory.slice(0, navIndex + 1);
+      navHistory.push(result.filePath);
+      navIndex = navHistory.length - 1;
+    }
+    updateNavButtons();
+
+    // Auto-open parent folder if file is outside current folder (or no folder loaded)
+    const parentDir = result.filePath.substring(0, result.filePath.lastIndexOf("/"));
+    if (parentDir && (!currentFolderPath || !parentDir.startsWith(currentFolderPath))) {
+      openFolder(parentDir);
+    }
 
     els.toolbarTitle.textContent = result.fileName;
     document.title = `MRE - ${result.fileName}`;
@@ -620,17 +664,31 @@ async function openFile(path) {
       els.btnTts.style.display = "";
     }
 
-    // Mark active in sidebar
-    document.querySelectorAll(".tree-item.active").forEach((el) => el.classList.remove("active"));
-    const activeItem = document.querySelector(`.tree-item[data-path="${CSS.escape(result.filePath)}"]`);
-    if (activeItem) activeItem.classList.add("active");
+    // Mark active in sidebar and expand parent folders
+    revealInTree(result.filePath);
 
-    // External links
+    // Handle links: .md links navigate in-app, external/mailto open externally with confirmation
     els.content.querySelectorAll("a[href]").forEach((a) => {
       const href = a.getAttribute("href");
-      if (href && (href.startsWith("http://") || href.startsWith("https://"))) {
-        a.setAttribute("target", "_blank");
-        a.setAttribute("rel", "noopener noreferrer");
+      if (!href) return;
+      if (href.match(/\.(?:md|markdown|mdown|mkd|mkdn|mdx)(?:#.*)?$/i)) {
+        a.addEventListener("click", (e) => {
+          e.preventDefault();
+          const linkPath = href.replace(/#.*$/, "");
+          const parentDir = currentPath.substring(0, currentPath.lastIndexOf("/"));
+          const resolved = resolvePath(parentDir + "/" + linkPath);
+          openFile(resolved);
+        });
+      } else if (href.startsWith("http://") || href.startsWith("https://") || href.startsWith("mailto:")) {
+        a.removeAttribute("target");
+        a.addEventListener("click", async (e) => {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          const { ask } = await import("@tauri-apps/plugin-dialog");
+          const label = href.startsWith("mailto:") ? "Send email to " + href.slice(7) + "?" : "Open this link in your browser?";
+          const confirmed = await ask(href, { title: label, kind: "info", okLabel: "Open", cancelLabel: "Cancel" });
+          if (confirmed) invoke("open_path", { path: href });
+        });
       }
     });
 
@@ -648,13 +706,61 @@ async function openFile(path) {
   }
 }
 
+let folderLoading = false;
 async function openFolder(path) {
+  if (folderLoading) return;
+  folderLoading = true;
   try {
     folderTree = await invoke("scan_folder", { path });
+    currentFolderPath = path;
     renderFileTree();
   } catch (err) {
     console.error("Failed to scan folder:", err);
+  } finally {
+    folderLoading = false;
   }
+}
+
+async function refreshFolder() {
+  if (!currentFolderPath) return;
+  await openFolder(currentFolderPath);
+}
+
+// ===== Navigation History =====
+function updateNavButtons() {
+  els.btnNavBack.disabled = navIndex <= 0;
+  els.btnNavForward.disabled = navIndex >= navHistory.length - 1;
+  els.btnNavRefresh.disabled = !currentPath;
+}
+
+async function navBack() {
+  if (navIndex <= 0) return;
+  navIndex--;
+  navNavigating = true;
+  try { await openFile(navHistory[navIndex]); }
+  finally { navNavigating = false; }
+}
+
+async function navForward() {
+  if (navIndex >= navHistory.length - 1) return;
+  navIndex++;
+  navNavigating = true;
+  try { await openFile(navHistory[navIndex]); }
+  finally { navNavigating = false; }
+}
+
+async function navHome() {
+  if (!currentFolderPath || !folderTree.length) return;
+  const mdFiles = folderTree.filter((e) => !e.isDir && /\.(?:md|markdown|mdown|mkd|mkdn|mdx)$/i.test(e.name));
+  // Prefer README.md (case-insensitive), otherwise pick the first .md file
+  const readme = mdFiles.find((e) => e.name.toLowerCase() === "readme.md");
+  const target = readme || mdFiles[0];
+  if (target) await openFile(target.path);
+}
+
+async function navRefresh() {
+  if (!currentPath) return;
+  await openFile(currentPath);
 }
 
 // ===== Dialogs =====
@@ -692,6 +798,28 @@ async function openFolderDialog() {
   }
 }
 
+function revealInTree(filePath) {
+  document.querySelectorAll(".tree-item.active").forEach((el) => el.classList.remove("active"));
+  const activeItem = document.querySelector(`.tree-item[data-path="${CSS.escape(filePath)}"]`);
+  if (!activeItem) return;
+  activeItem.classList.add("active");
+  // Expand all parent .tree-children containers so the file is visible
+  let el = activeItem.parentElement;
+  while (el && el !== els.fileTree) {
+    if (el.classList.contains("tree-children") && !el.classList.contains("expanded")) {
+      el.classList.add("expanded");
+      // Also expand the chevron on the preceding dir item
+      const dirItem = el.previousElementSibling;
+      if (dirItem) {
+        const chevron = dirItem.querySelector(".tree-chevron");
+        if (chevron) chevron.classList.add("expanded");
+      }
+    }
+    el = el.parentElement;
+  }
+  activeItem.scrollIntoView({ block: "nearest" });
+}
+
 // ===== File Tree Rendering =====
 function renderFileTree() {
   els.fileTree.innerHTML = "";
@@ -699,6 +827,8 @@ function renderFileTree() {
   const fragment = document.createDocumentFragment();
   renderEntries(folderTree, fragment, 0);
   els.fileTree.appendChild(fragment);
+  // Mark currently open file as active and expand its parent folders
+  if (currentPath) revealInTree(currentPath);
 }
 
 function renderEntries(entries, container, depth) {
@@ -843,6 +973,11 @@ function toggleFavoritesFilter() {
 async function enterEditMode() {
   if (!currentPath || editMode) return;
   try {
+    // Capture scroll position as a ratio before switching views
+    const scrollRatio = els.contentScroll.scrollHeight > els.contentScroll.clientHeight
+      ? els.contentScroll.scrollTop / (els.contentScroll.scrollHeight - els.contentScroll.clientHeight)
+      : 0;
+
     const raw = await invoke("read_file_content", { path: currentPath });
     els.editor.value = raw;
     els.content.style.display = "none";
@@ -853,13 +988,24 @@ async function enterEditMode() {
     els.btnTts.style.display = "none";
     editMode = true;
     updateEditorLineNumbers();
-    els.editor.focus();
+
+    // Restore scroll position proportionally in the editor
+    requestAnimationFrame(() => {
+      const editorMaxScroll = els.editor.scrollHeight - els.editor.clientHeight;
+      els.editor.scrollTop = Math.round(scrollRatio * editorMaxScroll);
+      els.editorLineNumbers.scrollTop = els.editor.scrollTop;
+    });
   } catch (err) {
     console.error("Failed to read file for editing:", err);
   }
 }
 
 function exitEditMode() {
+  // Capture editor scroll ratio before switching back
+  const scrollRatio = els.editor.scrollHeight > els.editor.clientHeight
+    ? els.editor.scrollTop / (els.editor.scrollHeight - els.editor.clientHeight)
+    : 0;
+
   els.editorContainer.style.display = "none";
   els.content.style.display = "block";
   els.btnSave.style.display = "none";
@@ -867,6 +1013,12 @@ function exitEditMode() {
   els.btnExportPdf.style.display = "";
   els.btnTts.style.display = "";
   editMode = false;
+
+  // Restore scroll position proportionally in the preview
+  requestAnimationFrame(() => {
+    const maxScroll = els.contentScroll.scrollHeight - els.contentScroll.clientHeight;
+    els.contentScroll.scrollTop = Math.round(scrollRatio * maxScroll);
+  });
 }
 
 function updateEditorLineNumbers() {
@@ -955,7 +1107,7 @@ async function highlightCodeBlocks() {
             }
           });
         },
-        { root: els.contentArea, rootMargin: "200px" }
+        { root: els.contentScroll, rootMargin: "200px" }
       );
       codeBlocks.forEach((block) => observer.observe(block));
     } else {
@@ -1513,9 +1665,10 @@ async function doPull() {
     const msg = await invoke("git_pull", { path: currentPath });
     els.toolbarTitle.textContent = msg;
     setTimeout(() => { els.toolbarTitle.textContent = prevTitle; }, 2000);
-    // Reload file if it changed
+    // Reload file and refresh sidebar if changes were pulled
     if (msg.includes("Fast-forwarded")) {
       await openFile(currentPath);
+      refreshFolder();
     }
   } catch (err) {
     els.toolbarTitle.textContent = prevTitle;

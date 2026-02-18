@@ -1,6 +1,6 @@
 [package]
 name = "mre"
-version = "0.1.7"
+version = "0.1.8"
 description = "Markdown Read & Edit — a lightweight GitHub-style markdown editor"
 authors = ["derrick"]
 edition = "2021"
