@@ -217,6 +217,12 @@ pub fn export_pdf(source_path: String, output_path: String, font_size: f64) -> R
 }
 
 #[tauri::command]
+pub fn export_diagram_pdf(svg_content: String, output_path: String, landscape: bool) -> Result<(), String> {
+    let output = Path::new(&output_path);
+    crate::pdf_export::export_svg_to_pdf(&svg_content, output, landscape)
+}
+
+#[tauri::command]
 pub fn open_path(path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let cmd = "open";

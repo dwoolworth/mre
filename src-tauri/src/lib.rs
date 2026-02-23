@@ -34,6 +34,7 @@ pub fn run() {
             commands::scan_folder,
             commands::get_initial_file,
             commands::export_pdf,
+            commands::export_diagram_pdf,
             commands::read_file_content,
             commands::save_file,
             commands::open_path,

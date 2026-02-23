@@ -28,6 +28,10 @@ base64 = "0.22"
 typst-as-lib = { version = "0.15", features = ["typst-kit-fonts", "typst-kit-embed-fonts"] }
 typst-pdf = "0.14"
 typst = "0.14"
+resvg = "0.45"
+usvg = "0.45"
+tiny-skia = "0.11"
+fontdb = "0.23"
 
 [profile.release]
 lto = true

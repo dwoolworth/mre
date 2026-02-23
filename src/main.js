@@ -13,6 +13,28 @@ async function loadHighlightJs() {
   return hljs;
 }
 
+// ===== Lazy-loaded mermaid.js =====
+let mermaidLib = null;
+async function loadMermaid() {
+  if (mermaidLib) return mermaidLib;
+  const mod = await import("mermaid");
+  mermaidLib = mod.default;
+  mermaidLib.initialize({
+    startOnLoad: false,
+    theme: getCurrentScheme() === "dark" ? "dark" : "default",
+    securityLevel: "strict",
+  });
+  return mermaidLib;
+}
+
+function getCurrentScheme() {
+  let scheme = settings.colorScheme;
+  if (scheme === "system") {
+    scheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  return scheme;
+}
+
 // ===== State =====
 let currentPath = null;
 let favorites = JSON.parse(localStorage.getItem("md-favorites") || "[]");
@@ -88,6 +110,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     btnNavBack: document.getElementById("btn-nav-back"),
     btnNavForward: document.getElementById("btn-nav-forward"),
     btnNavHome: document.getElementById("btn-nav-home"),
+    btnNavTop: document.getElementById("btn-nav-top"),
+    btnNavBottom: document.getElementById("btn-nav-bottom"),
     btnNavRefresh: document.getElementById("btn-nav-refresh"),
     content: document.getElementById("content"),
     editorContainer: document.getElementById("editor-container"),
@@ -263,6 +287,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // ===== Toolbar buttons =====
   els.btnEdit = document.getElementById("btn-edit");
+  els.btnCancelEdit = document.getElementById("btn-cancel-edit");
   els.btnSave = document.getElementById("btn-save");
   els.btnExportPdf = document.getElementById("btn-export-pdf");
   document.getElementById("btn-toggle-sidebar").addEventListener("click", toggleSidebar);
@@ -280,6 +305,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (diffMode && selectedCommitOid) renderDiff();
   });
   els.btnEdit.addEventListener("click", enterEditMode);
+  els.btnCancelEdit.addEventListener("click", cancelEdit);
   els.btnSave.addEventListener("click", saveFile);
   els.editor.addEventListener("input", updateEditorLineNumbers);
   els.editor.addEventListener("scroll", () => {
@@ -385,6 +411,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   els.btnNavBack.addEventListener("click", navBack);
   els.btnNavForward.addEventListener("click", navForward);
   els.btnNavHome.addEventListener("click", navHome);
+  els.btnNavTop.addEventListener("click", () => { els.contentScroll.scrollTop = 0; });
+  els.btnNavBottom.addEventListener("click", () => { els.contentScroll.scrollTop = els.contentScroll.scrollHeight; });
   els.btnNavRefresh.addEventListener("click", navRefresh);
 
   // ===== Filter input =====
@@ -692,6 +720,7 @@ async function openFile(path) {
       }
     });
 
+    await renderMermaidBlocks(els.content);
     await highlightCodeBlocks();
     refreshGitStatus(result.filePath);
 
@@ -983,6 +1012,7 @@ async function enterEditMode() {
     els.content.style.display = "none";
     els.editorContainer.style.display = "flex";
     els.btnEdit.style.display = "none";
+    els.btnCancelEdit.style.display = "";
     els.btnSave.style.display = "";
     els.btnExportPdf.style.display = "none";
     els.btnTts.style.display = "none";
@@ -1008,6 +1038,7 @@ function exitEditMode() {
 
   els.editorContainer.style.display = "none";
   els.content.style.display = "block";
+  els.btnCancelEdit.style.display = "none";
   els.btnSave.style.display = "none";
   els.btnEdit.style.display = "";
   els.btnExportPdf.style.display = "";
@@ -1019,6 +1050,12 @@ function exitEditMode() {
     const maxScroll = els.contentScroll.scrollHeight - els.contentScroll.clientHeight;
     els.contentScroll.scrollTop = Math.round(scrollRatio * maxScroll);
   });
+}
+
+async function cancelEdit() {
+  exitEditMode();
+  // Re-render the file to discard any unsaved changes
+  if (currentPath) await openFile(currentPath);
 }
 
 function updateEditorLineNumbers() {
@@ -1090,6 +1127,242 @@ async function exportPdf() {
   }
 }
 
+// ===== Mermaid Diagrams =====
+
+// Convert foreignObject elements to native SVG text for PDF export
+// (resvg/typst can't render foreignObject HTML content)
+function cleanSvgForExport(svgString) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(svgString, "image/svg+xml");
+  const svg = doc.documentElement;
+
+  // Add white background
+  const bgRect = doc.createElementNS("http://www.w3.org/2000/svg", "rect");
+  bgRect.setAttribute("width", "100%");
+  bgRect.setAttribute("height", "100%");
+  bgRect.setAttribute("fill", "white");
+  svg.insertBefore(bgRect, svg.firstChild);
+
+  // Force light theme by directly rewriting fill/stroke attributes on all elements
+  const allEls = svg.querySelectorAll("path, rect, circle, line");
+  for (const el of allEls) {
+    const fill = el.getAttribute("fill");
+    if (fill && fill !== "none" && fill !== "white") {
+      if (fill === "#1f2020" || fill === "#1f2328") {
+        el.setAttribute("fill", "#ffffff");
+      } else if (fill.startsWith("hsl(")) {
+        // Parse lightness from hsl(..., ..., L%)
+        const match = fill.match(/,\s*([\d.]+)%\s*\)/);
+        if (match) {
+          const lightness = parseFloat(match[1]);
+          if (lightness < 20) {
+            el.setAttribute("fill", lightness < 10 ? "#ffffff" : "#f6f8fa");
+          }
+        }
+      } else if (fill.startsWith("rgba(") || fill === "rgb(32, 31, 31)") {
+        el.setAttribute("fill", "#ffffff");
+      }
+    }
+    const stroke = el.getAttribute("stroke");
+    if (stroke === "#ccc" || stroke === "lightgrey" || stroke === "lightGrey") {
+      el.setAttribute("stroke", "#57606a");
+    }
+  }
+
+  // Rewrite CSS styles in <style> elements (dark theme colors)
+  const existingStyles = svg.querySelectorAll("style");
+  for (const s of existingStyles) {
+    s.textContent = s.textContent
+      .replace(/fill:\s*#ccc/g, "fill: #1f2328")
+      .replace(/fill:\s*#1f2020/g, "fill: #ffffff")
+      .replace(/stroke:\s*#ccc/g, "stroke: #57606a")
+      .replace(/stroke:\s*lightgrey/g, "stroke: #57606a")
+      .replace(/fill:\s*lightgrey/g, "fill: #57606a");
+  }
+
+  // Replace all foreignObject elements with SVG text
+  const fos = Array.from(svg.querySelectorAll("foreignObject"));
+  for (const fo of fos) {
+    const width = parseFloat(fo.getAttribute("width") || "0");
+    const height = parseFloat(fo.getAttribute("height") || "0");
+    const text = fo.textContent.trim();
+
+    if (!text || width === 0) {
+      fo.remove();
+      continue;
+    }
+
+    const textEl = doc.createElementNS("http://www.w3.org/2000/svg", "text");
+    textEl.setAttribute("x", String(width / 2));
+    textEl.setAttribute("y", String(height / 2));
+    textEl.setAttribute("text-anchor", "middle");
+    textEl.setAttribute("dominant-baseline", "central");
+    textEl.setAttribute("font-family", "Helvetica Neue, Arial, sans-serif");
+    textEl.setAttribute("fill", "#1f2328");
+
+    // Detect font size from class: entity names are larger, attributes are smaller
+    const isNodeLabel = fo.querySelector(".nodeLabel") !== null;
+    const isEdgeLabel = fo.querySelector(".edgeLabel") !== null;
+    textEl.setAttribute("font-size", isEdgeLabel ? "12" : "14");
+    if (isNodeLabel && height > 20) {
+      const parent = fo.closest(".label");
+      if (parent) {
+        textEl.setAttribute("font-weight", "bold");
+        textEl.setAttribute("font-size", "16");
+      }
+    }
+
+    textEl.textContent = text;
+    fo.parentNode.replaceChild(textEl, fo);
+  }
+
+  return new XMLSerializer().serializeToString(svg);
+}
+
+async function renderMermaidBlocks(container) {
+  const mermaidBlocks = container.querySelectorAll("pre code.language-mermaid");
+  if (mermaidBlocks.length === 0) return;
+
+  const mm = await loadMermaid();
+  let counter = 0;
+
+  for (const codeEl of mermaidBlocks) {
+    const pre = codeEl.parentElement;
+    const definition = codeEl.textContent;
+    const id = `mermaid-${Date.now()}-${counter++}`;
+
+    try {
+      const { svg } = await mm.render(id, definition);
+      const wrapper = document.createElement("div");
+      wrapper.className = "mermaid-diagram";
+      wrapper.innerHTML = svg;
+
+      // Click to open fullscreen
+      wrapper.addEventListener("click", () => openMermaidFullscreen(svg));
+
+      pre.replaceWith(wrapper);
+    } catch (err) {
+      // On syntax error, leave as code block for highlight.js
+      console.warn("Mermaid render failed:", err);
+    }
+  }
+}
+
+function openMermaidFullscreen(svg) {
+  const overlay = document.createElement("div");
+  overlay.className = "mermaid-fullscreen";
+
+  const toolbar = document.createElement("div");
+  toolbar.className = "mermaid-fs-toolbar";
+
+  let scale = 1, panX = 0, panY = 0;
+  const container = document.createElement("div");
+  container.className = "mermaid-fs-container";
+  container.innerHTML = svg;
+
+  function applyTransform() {
+    container.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+  }
+
+  const zoomIn = document.createElement("button");
+  zoomIn.className = "nav-btn";
+  zoomIn.title = "Zoom in";
+  zoomIn.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 4a.5.5 0 01.5.5v3h3a.5.5 0 010 1h-3v3a.5.5 0 01-1 0v-3h-3a.5.5 0 010-1h3v-3A.5.5 0 018 4z"/></svg>`;
+  zoomIn.addEventListener("click", (e) => { e.stopPropagation(); scale = Math.min(5, scale + 0.25); applyTransform(); });
+
+  const zoomOut = document.createElement("button");
+  zoomOut.className = "nav-btn";
+  zoomOut.title = "Zoom out";
+  zoomOut.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 8a.5.5 0 01.5-.5h7a.5.5 0 010 1h-7A.5.5 0 014 8z"/></svg>`;
+  zoomOut.addEventListener("click", (e) => { e.stopPropagation(); scale = Math.max(0.25, scale - 0.25); applyTransform(); });
+
+  const resetBtn = document.createElement("button");
+  resetBtn.className = "nav-btn";
+  resetBtn.title = "Reset view";
+  resetBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 3a5 5 0 0 1 4.546 2.914.5.5 0 1 0 .908-.418A6 6 0 0 0 2.083 5.5H1.5a.5.5 0 0 0 0 1h2a.5.5 0 0 0 .5-.5v-2a.5.5 0 0 0-1 0v.674A5.97 5.97 0 0 1 8 3zM3.546 10.086a.5.5 0 1 0-.908.418A6 6 0 0 0 13.917 10.5h.583a.5.5 0 0 0 0-1h-2a.5.5 0 0 0-.5.5v2a.5.5 0 0 0 1 0v-.674A5.97 5.97 0 0 1 8 13a5 5 0 0 1-4.454-2.914z"/></svg>`;
+  resetBtn.addEventListener("click", (e) => { e.stopPropagation(); scale = 1; panX = 0; panY = 0; applyTransform(); });
+
+  const close = document.createElement("button");
+  close.className = "nav-btn";
+  close.title = "Close (Esc)";
+  close.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.749.749 0 011.275.326.749.749 0 01-.215.734L9.06 8l3.22 3.22a.749.749 0 01-.326 1.275.749.749 0 01-.734-.215L8 9.06l-3.22 3.22a.751.751 0 01-1.042-.018.751.751 0 01-.018-1.042L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>`;
+  close.addEventListener("click", (e) => { e.stopPropagation(); cleanup(); });
+
+  const printBtn = document.createElement("button");
+  printBtn.className = "nav-btn";
+  printBtn.title = "Export diagram to PDF";
+  printBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75z"/><path d="M7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.969a.749.749 0 111.06 1.06l-3.25 3.25a.749.749 0 01-1.06 0L4.22 6.78a.749.749 0 111.06-1.06l1.97 1.969z"/></svg>`;
+  printBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const { ask } = await import("@tauri-apps/plugin-dialog");
+    const landscape = await ask("Choose page orientation", { title: "Export Diagram to PDF", kind: "info", okLabel: "Landscape", cancelLabel: "Portrait" });
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const outPath = await save({ defaultPath: "diagram.pdf", filters: [{ name: "PDF", extensions: ["pdf"] }] });
+    if (!outPath) return;
+    const path = typeof outPath === "string" ? outPath : outPath.path;
+    try {
+      const cleanedSvg = cleanSvgForExport(svg);
+      await invoke("export_diagram_pdf", { svgContent: cleanedSvg, outputPath: path, landscape });
+      await invoke("open_path", { path });
+    } catch (err) {
+      alert("PDF export failed: " + err);
+    }
+  });
+
+  toolbar.appendChild(zoomIn);
+  toolbar.appendChild(zoomOut);
+  toolbar.appendChild(resetBtn);
+  const sep = document.createElement("span");
+  sep.className = "toolbar-sep";
+  toolbar.appendChild(sep);
+  toolbar.appendChild(printBtn);
+  toolbar.appendChild(close);
+
+  // Click-drag to pan
+  let dragging = false, dragStartX = 0, dragStartY = 0, startPanX = 0, startPanY = 0;
+  const viewport = document.createElement("div");
+  viewport.className = "mermaid-fs-viewport";
+  viewport.appendChild(container);
+
+  viewport.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    dragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    startPanX = panX;
+    startPanY = panY;
+    viewport.style.cursor = "grabbing";
+    e.preventDefault();
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    panX = startPanX + (e.clientX - dragStartX);
+    panY = startPanY + (e.clientY - dragStartY);
+    applyTransform();
+  });
+  window.addEventListener("mouseup", () => {
+    dragging = false;
+    viewport.style.cursor = "grab";
+  });
+
+  // Scroll wheel zoom
+  viewport.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    scale = Math.min(5, Math.max(0.25, scale + (e.deltaY < 0 ? 0.15 : -0.15)));
+    applyTransform();
+  }, { passive: false });
+
+  overlay.appendChild(toolbar);
+  overlay.appendChild(viewport);
+
+  // Escape to close
+  function cleanup() { overlay.remove(); document.removeEventListener("keydown", onKey); }
+  const onKey = (e) => { if (e.key === "Escape") cleanup(); };
+  document.addEventListener("keydown", onKey);
+
+  document.body.appendChild(overlay);
+}
+
 // ===== Code Highlighting =====
 async function highlightCodeBlocks() {
   const codeBlocks = els.content.querySelectorAll("pre code");
@@ -1122,12 +1395,17 @@ async function highlightCodeBlocks() {
 
 // ===== Theme =====
 function applyTheme() {
-  let scheme = settings.colorScheme;
-  if (scheme === "system") {
-    scheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  }
+  const scheme = getCurrentScheme();
   const dataTheme = `${settings.themeName}-${scheme}`;
   document.body.setAttribute("data-theme", dataTheme);
+  // Sync mermaid theme if loaded
+  if (mermaidLib) {
+    mermaidLib.initialize({
+      startOnLoad: false,
+      theme: scheme === "dark" ? "dark" : "default",
+      securityLevel: "strict",
+    });
+  }
 }
 
 // Listen for system theme changes
@@ -1421,7 +1699,8 @@ async function renderPreview(oid) {
     els.historyPreviewContent.innerHTML = result.html;
     els.historyPreviewContent.style.fontSize = `${settings.fontSize}px`;
 
-    // Highlight code blocks in the preview
+    // Render mermaid diagrams, then highlight code blocks
+    await renderMermaidBlocks(els.historyPreviewContent);
     const codeBlocks = els.historyPreviewContent.querySelectorAll("pre code");
     if (codeBlocks.length > 0) {
       try {

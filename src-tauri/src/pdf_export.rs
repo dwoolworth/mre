@@ -82,6 +82,68 @@ const TYPST_PREAMBLE: &str = r##"
 
 "##;
 
+pub fn export_svg_to_pdf(svg_content: &str, output_path: &Path, landscape: bool) -> Result<(), String> {
+    // Rasterize SVG to PNG using resvg (properly renders SVG text with system fonts)
+    let mut options = usvg::Options::default();
+    options.fontdb_mut().load_system_fonts();
+
+    let tree = usvg::Tree::from_str(svg_content, &options)
+        .map_err(|e| format!("Failed to parse SVG: {e}"))?;
+
+    let size = tree.size();
+    let scale = 3.0_f32; // 3x for high-quality rasterization
+    let width_px = (size.width() * scale) as u32;
+    let height_px = (size.height() * scale) as u32;
+
+    let mut pixmap = tiny_skia::Pixmap::new(width_px, height_px)
+        .ok_or("Failed to create pixmap")?;
+    pixmap.fill(tiny_skia::Color::WHITE);
+
+    let transform = tiny_skia::Transform::from_scale(scale, scale);
+    resvg::render(&tree, transform, &mut pixmap.as_mut());
+
+    let png_data = pixmap.encode_png().map_err(|e| format!("Failed to encode PNG: {e}"))?;
+
+    // Write PNG to temp file for typst to reference
+    let temp_dir = std::env::temp_dir();
+    let png_path = temp_dir.join("mre_diagram.png");
+    fs::write(&png_path, &png_data).map_err(|e| format!("Failed to write temp PNG: {e}"))?;
+
+    let (page_width, page_height) = if landscape { ("11in", "8.5in") } else { ("8.5in", "11in") };
+
+    let typst_source = format!(
+        r#"#set page(width: {page_width}, height: {page_height}, margin: 0.25in)
+#align(center + horizon)[
+  #image("mre_diagram.png", width: 100%, height: 100%, fit: "contain")
+]"#
+    );
+
+    let engine = TypstEngine::builder()
+        .main_file(typst_source)
+        .with_file_system_resolver(&temp_dir)
+        .search_fonts_with(
+            TypstKitFontOptions::default()
+                .include_system_fonts(true)
+                .include_embedded_fonts(true),
+        )
+        .build();
+
+    let doc: PagedDocument = engine
+        .compile()
+        .output
+        .map_err(|e| format!("Typst compilation error: {e:?}"))?;
+
+    let pdf_bytes = typst_pdf::pdf(&doc, &typst_pdf::PdfOptions::default())
+        .map_err(|e| format!("PDF generation error: {e:?}"))?;
+
+    fs::write(output_path, pdf_bytes).map_err(|e| format!("Failed to write PDF: {e}"))?;
+
+    // Clean up temp file
+    let _ = fs::remove_file(&png_path);
+
+    Ok(())
+}
+
 pub fn export_pdf(markdown: &str, source_path: &Path, output_path: &Path, font_size: f32) -> Result<(), String> {
     let base_dir = source_path.parent().unwrap_or(Path::new("/"));
 

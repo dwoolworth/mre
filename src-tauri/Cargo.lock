@@ -3024,14 +3024,16 @@ dependencies = [
 
 [[package]]
 name = "mre"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "base64 0.22.1",
  "comrak",
+ "fontdb",
  "git2",
  "notify",
  "regex",
  "reqwest 0.12.28",
+ "resvg",
  "serde",
  "serde_json",
  "similar",
@@ -3039,9 +3041,11 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "tauri-plugin-single-instance",
+ "tiny-skia",
  "typst",
  "typst-as-lib",
  "typst-pdf",
+ "usvg",
 ]
 
 [[package]]
