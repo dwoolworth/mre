@@ -4,14 +4,15 @@ mod git_commands;
 mod github_auth;
 mod markdown;
 mod pdf_export;
+mod recent;
 mod state;
+mod terminal;
 mod tts;
 mod typst_convert;
 mod watcher;
 
 use state::AppState;
 use std::path::PathBuf;
-use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -57,6 +58,14 @@ pub fn run() {
             tts::tts_generate,
             tts::tts_cancel,
             tts::tts_list_voices,
+            commands::search_in_files,
+            terminal::spawn_terminal,
+            terminal::send_terminal_input,
+            terminal::resize_terminal,
+            terminal::close_terminal,
+            recent::add_recent_file,
+            recent::add_recent_folder,
+            recent::clear_recents,
         ])
         .setup(|app| {
             // Set app data dir and load saved GitHub token
@@ -80,108 +89,15 @@ pub fn run() {
                 }
             }
 
-            // Build custom menu
-            let open_file = MenuItemBuilder::new("Open File...")
-                .id("open_file")
-                .accelerator("Cmd+O")
-                .build(app)?;
-            let open_folder = MenuItemBuilder::new("Open Folder...")
-                .id("open_folder")
-                .accelerator("Cmd+Shift+O")
-                .build(app)?;
-            let export_pdf = MenuItemBuilder::new("Export to PDF...")
-                .id("export_pdf")
-                .accelerator("Cmd+E")
-                .build(app)?;
-            let edit_document = MenuItemBuilder::new("Edit Document")
-                .id("edit_document")
-                .build(app)?;
-            let save_file = MenuItemBuilder::new("Save")
-                .id("save_file")
-                .accelerator("Cmd+S")
-                .build(app)?;
-            let save_file_as = MenuItemBuilder::new("Save As...")
-                .id("save_file_as")
-                .accelerator("Cmd+Shift+S")
-                .build(app)?;
-            let file_history = MenuItemBuilder::new("File History")
-                .id("file_history")
-                .accelerator("Cmd+Shift+H")
-                .build(app)?;
-            let read_aloud = MenuItemBuilder::new("Read Aloud")
-                .id("read_aloud")
-                .accelerator("Cmd+T")
-                .build(app)?;
-
-            let about = AboutMetadata {
-                name: Some("Markdown Read & Edit".into()),
-                version: Some("0.1.1".into()),
-                copyright: Some("Made in U.S.A.".into()),
-                ..Default::default()
-            };
-
-            let preferences = MenuItemBuilder::new("Preferences...")
-                .id("preferences")
-                .accelerator("Cmd+,")
-                .build(app)?;
-
-            let app_submenu = SubmenuBuilder::new(app, "MRE")
-                .about(Some(about))
-                .separator()
-                .item(&preferences)
-                .separator()
-                .services()
-                .separator()
-                .hide()
-                .hide_others()
-                .show_all()
-                .separator()
-                .quit()
-                .build()?;
-
-            let file_submenu = SubmenuBuilder::new(app, "File")
-                .item(&open_file)
-                .item(&open_folder)
-                .separator()
-                .item(&edit_document)
-                .separator()
-                .item(&save_file)
-                .item(&save_file_as)
-                .separator()
-                .item(&export_pdf)
-                .separator()
-                .item(&file_history)
-                .item(&read_aloud)
-                .separator()
-                .close_window()
-                .build()?;
-
-            let edit_submenu = SubmenuBuilder::new(app, "Edit")
-                .undo()
-                .redo()
-                .separator()
-                .cut()
-                .copy()
-                .paste()
-                .separator()
-                .select_all()
-                .build()?;
-
-            let window_submenu = SubmenuBuilder::new(app, "Window")
-                .minimize()
-                .maximize()
-                .separator()
-                .close_window()
-                .build()?;
-
-            let menu = MenuBuilder::new(app)
-                .items(&[&app_submenu, &file_submenu, &edit_submenu, &window_submenu])
-                .build()?;
-
+            // Build menu with recent items
+            let app_state = app.state::<AppState>();
+            let recents = recent::load_recents(&app_state);
+            let menu = recent::build_app_menu(app, &recents)?;
             app.set_menu(menu)?;
 
             app.on_menu_event(move |app_handle, event| {
-                match event.id().0.as_str() {
+                let id = event.id().0.as_str();
+                match id {
                     "open_file" => {
                         let _ = app_handle.emit("menu-open-file", ());
                     }
@@ -209,7 +125,35 @@ pub fn run() {
                     "read_aloud" => {
                         let _ = app_handle.emit("menu-read-aloud", ());
                     }
-                    _ => {}
+                    "find" => {
+                        let _ = app_handle.emit("menu-find", ());
+                    }
+                    "find_replace" => {
+                        let _ = app_handle.emit("menu-find-replace", ());
+                    }
+                    "clear_recents" => {
+                        let _ = app_handle.emit("menu-clear-recents", ());
+                    }
+                    _ => {
+                        // Handle recent_file_N and recent_folder_N clicks
+                        if let Some(idx_str) = id.strip_prefix("recent_file_") {
+                            if let Ok(idx) = idx_str.parse::<usize>() {
+                                let state = app_handle.state::<AppState>();
+                                let data = recent::load_recents(&state);
+                                if let Some(path) = data.recent_files.get(idx) {
+                                    let _ = app_handle.emit("menu-open-recent-file", path.clone());
+                                }
+                            }
+                        } else if let Some(idx_str) = id.strip_prefix("recent_folder_") {
+                            if let Ok(idx) = idx_str.parse::<usize>() {
+                                let state = app_handle.state::<AppState>();
+                                let data = recent::load_recents(&state);
+                                if let Some(path) = data.recent_folders.get(idx) {
+                                    let _ = app_handle.emit("menu-open-recent-folder", path.clone());
+                                }
+                            }
+                        }
+                    }
                 }
             });
 

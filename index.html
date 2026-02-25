@@ -112,6 +112,11 @@
               <path d="M8 3a5 5 0 0 1 4.546 2.914.5.5 0 1 0 .908-.418A6 6 0 0 0 2.083 5.5H1.5a.5.5 0 0 0 0 1h2a.5.5 0 0 0 .5-.5v-2a.5.5 0 0 0-1 0v.674A5.97 5.97 0 0 1 8 3zM3.546 10.086a.5.5 0 1 0-.908.418A6 6 0 0 0 13.917 10.5h.583a.5.5 0 0 0 0-1h-2a.5.5 0 0 0-.5.5v2a.5.5 0 0 0 1 0v-.674A5.97 5.97 0 0 1 8 13a5 5 0 0 1-4.454-2.914z"/>
             </svg>
           </button>
+          <button id="btn-search-contents" class="sidebar-icon-btn" title="Search in file contents">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M4 1.5h5.586a1.5 1.5 0 011.06.44l2.415 2.414a1.5 1.5 0 01.439 1.06V14.5a1.5 1.5 0 01-1.5 1.5h-8A1.5 1.5 0 012.5 14.5v-13A1.5 1.5 0 014 0h0v1.5zm3.5 7.5a2 2 0 10-1.44 1.92l1.76 1.76a.5.5 0 10.71-.71l-1.76-1.76A2 2 0 007.5 9zm-2-1a1 1 0 110 2 1 1 0 010-2z"/>
+            </svg>
+          </button>
         </div>
         <div id="file-tree"></div>
       </div>
@@ -152,6 +157,35 @@
               <path d="M8 3a5 5 0 0 1 4.546 2.914.5.5 0 1 0 .908-.418A6 6 0 0 0 2.083 5.5H1.5a.5.5 0 0 0 0 1h2a.5.5 0 0 0 .5-.5v-2a.5.5 0 0 0-1 0v.674A5.97 5.97 0 0 1 8 3zM3.546 10.086a.5.5 0 1 0-.908.418A6 6 0 0 0 13.917 10.5h.583a.5.5 0 0 0 0-1h-2a.5.5 0 0 0-.5.5v2a.5.5 0 0 0 1 0v-.674A5.97 5.97 0 0 1 8 13a5 5 0 0 1-4.454-2.914z"/>
             </svg>
           </button>
+          <span class="toolbar-sep"></span>
+          <button id="btn-nav-terminal" class="nav-btn" title="Toggle Terminal (Cmd+`)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0114.25 15H1.75A1.75 1.75 0 010 13.25Zm1.75-.25a.25.25 0 00-.25.25v10.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25V2.75a.25.25 0 00-.25-.25ZM7.25 8a.749.749 0 01-.22.53l-2.25 2.25a.749.749 0 11-1.06-1.06L5.44 8 3.72 6.28a.749.749 0 111.06-1.06l2.25 2.25c.141.14.22.331.22.53Zm1.5 1.5h3a.75.75 0 010 1.5h-3a.75.75 0 010-1.5Z"/>
+            </svg>
+          </button>
+        </div>
+        <!-- Find in Document Bar (read mode) -->
+        <div id="find-bar" style="display:none">
+          <input type="text" id="find-input" placeholder="Find in document..." />
+          <span id="find-count"></span>
+          <button id="btn-find-prev" class="find-btn" title="Previous (Shift+Enter)">&#9650;</button>
+          <button id="btn-find-next" class="find-btn" title="Next (Enter)">&#9660;</button>
+          <button id="btn-find-close" class="find-btn" title="Close (Escape)">&#10005;</button>
+        </div>
+        <!-- Editor Find & Replace Bar (edit mode) -->
+        <div id="editor-find-bar" style="display:none">
+          <div class="editor-find-row">
+            <input type="text" id="editor-find-input" placeholder="Find..." />
+            <span id="editor-find-count"></span>
+            <button id="btn-editor-find-prev" class="find-btn" title="Previous">&#9650;</button>
+            <button id="btn-editor-find-next" class="find-btn" title="Next">&#9660;</button>
+            <button id="btn-editor-find-close" class="find-btn" title="Close (Escape)">&#10005;</button>
+          </div>
+          <div class="editor-find-row editor-replace-row" style="display:none">
+            <input type="text" id="editor-replace-input" placeholder="Replace..." />
+            <button id="btn-editor-replace" class="find-btn find-btn-text" title="Replace">Replace</button>
+            <button id="btn-editor-replace-all" class="find-btn find-btn-text" title="Replace All">All</button>
+          </div>
         </div>
         <div id="content-scroll">
         <div id="empty-state">
@@ -234,6 +268,15 @@
             </svg>
           </button>
         </div>
+        </div>
+        <!-- Terminal Panel -->
+        <div id="terminal-resize-handle" style="display:none"></div>
+        <div id="terminal-panel" style="display:none">
+          <div id="terminal-tab-bar">
+            <div id="terminal-tabs"></div>
+            <button id="btn-terminal-add" class="terminal-tab-btn" title="New terminal">+</button>
+          </div>
+          <div id="terminal-containers"></div>
         </div>
       </div>
     </div>

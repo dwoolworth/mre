@@ -27,6 +27,19 @@ async function loadMermaid() {
   return mermaidLib;
 }
 
+// ===== Lazy-loaded xterm.js =====
+let xtermModule = null;
+let xtermFitAddon = null;
+let xtermWebLinksAddon = null;
+async function loadXterm() {
+  if (xtermModule) return { Terminal: xtermModule.Terminal, FitAddon: xtermFitAddon.FitAddon, WebLinksAddon: xtermWebLinksAddon.WebLinksAddon };
+  await import("@xterm/xterm/css/xterm.css");
+  xtermModule = await import("@xterm/xterm");
+  xtermFitAddon = await import("@xterm/addon-fit");
+  xtermWebLinksAddon = await import("@xterm/addon-web-links");
+  return { Terminal: xtermModule.Terminal, FitAddon: xtermFitAddon.FitAddon, WebLinksAddon: xtermWebLinksAddon.WebLinksAddon };
+}
+
 function getCurrentScheme() {
   let scheme = settings.colorScheme;
   if (scheme === "system") {
@@ -65,6 +78,27 @@ let ttsTotalChunks = 0;
 let ttsAudioElement = null;
 let ttsKeyStatus = { openai: false, google: false, elevenlabs: false };
 let ttsKeyModalProvider = null;
+
+// Find in Document state
+let findBarOpen = false;
+let findMatches = [];
+let findCurrentIndex = -1;
+
+// Editor Find & Replace state
+let editorFindOpen = false;
+let editorFindMatches = [];
+let editorFindCurrentIndex = -1;
+
+// Search in Files state
+let searchInFilesMode = false;
+let searchInFilesResults = [];
+
+// Terminal state
+let terminalOpen = false;
+let terminalInstances = new Map(); // id → { terminal, fitAddon, element, listener, exitListener, name }
+let activeTerminalId = null;
+let terminalPanelHeight = parseInt(localStorage.getItem("md-terminal-height")) || 300;
+let terminalCounter = 0;
 
 // Settings — now split into colorScheme + themeName
 let settings = {
@@ -187,6 +221,32 @@ window.addEventListener("DOMContentLoaded", async () => {
     ttsKeyTitle: document.getElementById("tts-key-title"),
     ttsKeyInstructions: document.getElementById("tts-key-instructions"),
     ttsKeyInput: document.getElementById("tts-key-input"),
+    // Terminal
+    terminalPanel: document.getElementById("terminal-panel"),
+    terminalResizeHandle: document.getElementById("terminal-resize-handle"),
+    terminalTabs: document.getElementById("terminal-tabs"),
+    terminalContainers: document.getElementById("terminal-containers"),
+    btnTerminalAdd: document.getElementById("btn-terminal-add"),
+    // Find in Document
+    findBar: document.getElementById("find-bar"),
+    findInput: document.getElementById("find-input"),
+    findCount: document.getElementById("find-count"),
+    btnFindPrev: document.getElementById("btn-find-prev"),
+    btnFindNext: document.getElementById("btn-find-next"),
+    btnFindClose: document.getElementById("btn-find-close"),
+    // Editor Find & Replace
+    editorFindBar: document.getElementById("editor-find-bar"),
+    editorFindInput: document.getElementById("editor-find-input"),
+    editorReplaceInput: document.getElementById("editor-replace-input"),
+    editorReplaceRow: document.querySelector(".editor-replace-row"),
+    editorFindCount: document.getElementById("editor-find-count"),
+    btnEditorFindPrev: document.getElementById("btn-editor-find-prev"),
+    btnEditorFindNext: document.getElementById("btn-editor-find-next"),
+    btnEditorFindClose: document.getElementById("btn-editor-find-close"),
+    btnEditorReplace: document.getElementById("btn-editor-replace"),
+    btnEditorReplaceAll: document.getElementById("btn-editor-replace-all"),
+    // Search in Files
+    btnSearchContents: document.getElementById("btn-search-contents"),
   };
 
   // Apply all settings
@@ -415,10 +475,68 @@ window.addEventListener("DOMContentLoaded", async () => {
   els.btnNavBottom.addEventListener("click", () => { els.contentScroll.scrollTop = els.contentScroll.scrollHeight; });
   els.btnNavRefresh.addEventListener("click", navRefresh);
 
+  // ===== Terminal buttons =====
+  document.getElementById("btn-nav-terminal").addEventListener("click", toggleTerminalPanel);
+  els.btnTerminalAdd.addEventListener("click", () => addTerminal());
+  setupTerminalResizeHandle();
+
+  // ===== Find in Document =====
+  els.btnFindClose.addEventListener("click", closeFindBar);
+  els.btnFindNext.addEventListener("click", findNext);
+  els.btnFindPrev.addEventListener("click", findPrev);
+  let findDebounce = null;
+  els.findInput.addEventListener("input", () => {
+    clearTimeout(findDebounce);
+    findDebounce = setTimeout(() => {
+      clearFindHighlights();
+      if (els.findInput.value) findInDocument(els.findInput.value);
+      else { findMatches = []; findCurrentIndex = -1; els.findCount.textContent = ""; }
+    }, 150);
+  });
+  els.findInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); e.shiftKey ? findPrev() : findNext(); }
+    if (e.key === "Escape") { e.preventDefault(); closeFindBar(); }
+  });
+
+  // ===== Editor Find & Replace =====
+  els.btnEditorFindClose.addEventListener("click", closeEditorFindBar);
+  els.btnEditorFindNext.addEventListener("click", editorFindNext);
+  els.btnEditorFindPrev.addEventListener("click", editorFindPrev);
+  els.btnEditorReplace.addEventListener("click", editorReplace);
+  els.btnEditorReplaceAll.addEventListener("click", editorReplaceAll);
+  let editorFindDebounce = null;
+  els.editorFindInput.addEventListener("input", () => {
+    clearTimeout(editorFindDebounce);
+    editorFindDebounce = setTimeout(() => {
+      if (els.editorFindInput.value) findInEditor(els.editorFindInput.value);
+      else { editorFindMatches = []; editorFindCurrentIndex = -1; els.editorFindCount.textContent = ""; }
+    }, 150);
+  });
+  els.editorFindInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); e.shiftKey ? editorFindPrev() : editorFindNext(); }
+    if (e.key === "Escape") { e.preventDefault(); closeEditorFindBar(); }
+  });
+  els.editorReplaceInput.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.preventDefault(); closeEditorFindBar(); }
+  });
+
+  // ===== Search in Files =====
+  els.btnSearchContents.addEventListener("click", toggleSearchInFiles);
+
   // ===== Filter input =====
+  let searchDebounce = null;
   els.filterInput.addEventListener("input", (e) => {
-    filterText = e.target.value.toLowerCase();
-    renderFileTree();
+    if (searchInFilesMode) {
+      clearTimeout(searchDebounce);
+      const q = e.target.value;
+      searchDebounce = setTimeout(() => {
+        if (q.trim()) performSearchInFiles(q.trim());
+        else { searchInFilesResults = []; renderFileTree(); }
+      }, 300);
+    } else {
+      filterText = e.target.value.toLowerCase();
+      renderFileTree();
+    }
   });
 
   // ===== Settings modal =====
@@ -446,8 +564,22 @@ window.addEventListener("DOMContentLoaded", async () => {
     } else if (mod && e.key === "b") {
       e.preventDefault();
       toggleSidebar();
+    } else if (mod && e.key === "`") {
+      e.preventDefault();
+      toggleTerminalPanel();
+    } else if (mod && e.key === "f") {
+      e.preventDefault();
+      if (editMode) openEditorFindBar(false);
+      else if (currentPath && !historyMode) openFindBar();
+    } else if (mod && e.key === "h") {
+      e.preventDefault();
+      if (editMode) openEditorFindBar(true);
     } else if (e.key === "Escape") {
-      if (commitPopoverOpen) {
+      if (findBarOpen) {
+        closeFindBar();
+      } else if (editorFindOpen) {
+        closeEditorFindBar();
+      } else if (commitPopoverOpen) {
         closeCommitPopover();
       } else if (historyMode) {
         exitHistory();
@@ -514,6 +646,22 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
   await listen("menu-read-aloud", () => {
     if (currentPath) toggleTts();
+  });
+  await listen("menu-find", () => {
+    if (editMode) openEditorFindBar(false);
+    else if (currentPath && !historyMode) openFindBar();
+  });
+  await listen("menu-find-replace", () => {
+    if (editMode) openEditorFindBar(true);
+  });
+  await listen("menu-open-recent-file", async (event) => {
+    if (event.payload) await openFile(event.payload);
+  });
+  await listen("menu-open-recent-folder", async (event) => {
+    if (event.payload) await openFolder(event.payload);
+  });
+  await listen("menu-clear-recents", () => {
+    invoke("clear_recents").catch(() => {});
   });
 
   // TTS events
@@ -654,11 +802,14 @@ function resolvePath(path) {
 // ===== File Operations =====
 async function openFile(path) {
   try {
+    if (findBarOpen) closeFindBar();
+    if (editorFindOpen) closeEditorFindBar();
     if (editMode) exitEditMode();
     const wasInHistory = historyMode;
 
     const result = await invoke("open_and_render", { path });
     currentPath = result.filePath;
+    invoke("add_recent_file", { path: result.filePath }).catch(() => {});
 
     // Track navigation history (skip duplicates and re-renders of the same file)
     if (!navNavigating && result.filePath && navHistory[navIndex] !== result.filePath) {
@@ -742,6 +893,7 @@ async function openFolder(path) {
   try {
     folderTree = await invoke("scan_folder", { path });
     currentFolderPath = path;
+    invoke("add_recent_folder", { path }).catch(() => {});
     renderFileTree();
   } catch (err) {
     console.error("Failed to scan folder:", err);
@@ -852,6 +1004,10 @@ function revealInTree(filePath) {
 // ===== File Tree Rendering =====
 function renderFileTree() {
   els.fileTree.innerHTML = "";
+  if (searchInFilesMode && searchInFilesResults.length > 0) {
+    // Search results are rendered by renderSearchResults, not here
+    return;
+  }
   if (folderTree.length === 0) return;
   const fragment = document.createDocumentFragment();
   renderEntries(folderTree, fragment, 0);
@@ -1001,6 +1157,7 @@ function toggleFavoritesFilter() {
 // ===== Edit Mode =====
 async function enterEditMode() {
   if (!currentPath || editMode) return;
+  if (findBarOpen) closeFindBar();
   try {
     // Capture scroll position as a ratio before switching views
     const scrollRatio = els.contentScroll.scrollHeight > els.contentScroll.clientHeight
@@ -1031,6 +1188,7 @@ async function enterEditMode() {
 }
 
 function exitEditMode() {
+  if (editorFindOpen) closeEditorFindBar();
   // Capture editor scroll ratio before switching back
   const scrollRatio = els.editor.scrollHeight > els.editor.clientHeight
     ? els.editor.scrollTop / (els.editor.scrollHeight - els.editor.clientHeight)
@@ -1406,6 +1564,11 @@ function applyTheme() {
       securityLevel: "strict",
     });
   }
+  // Sync all terminal themes
+  const xtermTheme = getXtermTheme();
+  for (const inst of terminalInstances.values()) {
+    inst.terminal.options.theme = xtermTheme;
+  }
 }
 
 // Listen for system theme changes
@@ -1413,6 +1576,13 @@ window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () 
   if (settings.colorScheme === "system") {
     applyTheme();
     syncColorPickersToTheme();
+  }
+});
+
+// Clean up all terminal sessions on window close
+window.addEventListener("beforeunload", () => {
+  for (const [id] of terminalInstances) {
+    invoke("close_terminal", { id }).catch(() => {});
   }
 });
 
@@ -2324,6 +2494,668 @@ async function loadTtsVoices() {
   } catch (_) {
     // Provider key may not be set — that's fine
   }
+}
+
+// ===== Terminal =====
+function getXtermTheme() {
+  const cs = getComputedStyle(document.body);
+  const scheme = getCurrentScheme();
+  if (scheme === "dark") {
+    return {
+      background: cs.getPropertyValue("--bg-primary").trim() || "#0d1117",
+      foreground: cs.getPropertyValue("--text-primary").trim() || "#e6edf3",
+      cursor: cs.getPropertyValue("--text-primary").trim() || "#e6edf3",
+      cursorAccent: cs.getPropertyValue("--bg-primary").trim() || "#0d1117",
+      selectionBackground: "rgba(88, 166, 255, 0.3)",
+      black: "#484f58",
+      red: "#ff7b72",
+      green: "#7ee787",
+      yellow: "#e3b341",
+      blue: "#79c0ff",
+      magenta: "#d2a8ff",
+      cyan: "#56d4dd",
+      white: "#e6edf3",
+      brightBlack: "#6e7681",
+      brightRed: "#ffa198",
+      brightGreen: "#aff5b4",
+      brightYellow: "#f8e3a1",
+      brightBlue: "#a5d6ff",
+      brightMagenta: "#edc4ff",
+      brightCyan: "#a5f3fc",
+      brightWhite: "#ffffff",
+    };
+  }
+  return {
+    background: cs.getPropertyValue("--bg-primary").trim() || "#ffffff",
+    foreground: cs.getPropertyValue("--text-primary").trim() || "#1f2328",
+    cursor: cs.getPropertyValue("--text-primary").trim() || "#1f2328",
+    cursorAccent: cs.getPropertyValue("--bg-primary").trim() || "#ffffff",
+    selectionBackground: "rgba(9, 105, 218, 0.2)",
+    black: "#24292f",
+    red: "#cf222e",
+    green: "#116329",
+    yellow: "#4d2d00",
+    blue: "#0969da",
+    magenta: "#8250df",
+    cyan: "#1b7c83",
+    white: "#6e7781",
+    brightBlack: "#57606a",
+    brightRed: "#a40e26",
+    brightGreen: "#1a7f37",
+    brightYellow: "#633c01",
+    brightBlue: "#218bff",
+    brightMagenta: "#a475f9",
+    brightCyan: "#3192aa",
+    brightWhite: "#8c959f",
+  };
+}
+
+async function toggleTerminalPanel() {
+  if (terminalOpen) {
+    // Close panel
+    terminalOpen = false;
+    els.terminalPanel.style.display = "none";
+    els.terminalResizeHandle.style.display = "none";
+  } else {
+    // Open panel
+    terminalOpen = true;
+    els.terminalPanel.style.display = "flex";
+    els.terminalPanel.style.height = `${terminalPanelHeight}px`;
+    els.terminalResizeHandle.style.display = "";
+    if (terminalInstances.size === 0) {
+      await addTerminal();
+    } else if (activeTerminalId) {
+      // Refit the active terminal when reopening
+      const inst = terminalInstances.get(activeTerminalId);
+      if (inst) {
+        requestAnimationFrame(() => {
+          inst.fitAddon.fit();
+          inst.terminal.focus();
+        });
+      }
+    }
+  }
+}
+
+async function addTerminal() {
+  const { Terminal, FitAddon, WebLinksAddon } = await loadXterm();
+
+  const cwd = currentFolderPath || (currentPath ? currentPath.substring(0, currentPath.lastIndexOf("/")) : null);
+  const effectiveCwd = cwd || "";
+
+  let id;
+  try {
+    id = await invoke("spawn_terminal", { cwd: effectiveCwd });
+  } catch (err) {
+    console.error("Failed to spawn terminal:", err);
+    return;
+  }
+
+  terminalCounter++;
+  const name = `Terminal ${terminalCounter}`;
+
+  const terminal = new Terminal({
+    theme: getXtermTheme(),
+    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+    fontSize: 13,
+    cursorBlink: true,
+    allowProposedApi: true,
+  });
+
+  const fitAddon = new FitAddon();
+  terminal.loadAddon(fitAddon);
+
+  const webLinksAddon = new WebLinksAddon();
+  terminal.loadAddon(webLinksAddon);
+
+  const element = document.createElement("div");
+  element.className = "terminal-instance";
+  element.dataset.termId = id;
+  els.terminalContainers.appendChild(element);
+
+  terminal.open(element);
+
+  // Fit after a frame to let layout settle
+  requestAnimationFrame(() => {
+    fitAddon.fit();
+    // Tell backend about initial size
+    invoke("resize_terminal", { id, rows: terminal.rows, cols: terminal.cols }).catch(() => {});
+  });
+
+  // Wire input: user keystrokes → backend
+  terminal.onData((data) => {
+    invoke("send_terminal_input", { id, data }).catch(() => {});
+  });
+
+  // Wire output: backend → terminal
+  const outputEvent = `terminal-output-${id}`;
+  const outputListener = await listen(outputEvent, (event) => {
+    const decoded = atob(event.payload);
+    const bytes = new Uint8Array(decoded.length);
+    for (let i = 0; i < decoded.length; i++) bytes[i] = decoded.charCodeAt(i);
+    terminal.write(bytes);
+  });
+
+  // Wire exit event
+  const exitEvent = `terminal-exit-${id}`;
+  const exitListener = await listen(exitEvent, () => {
+    terminal.write("\r\n\x1b[90m[Process exited]\x1b[0m\r\n");
+  });
+
+  terminalInstances.set(id, { terminal, fitAddon, element, listener: outputListener, exitListener, name });
+  switchTerminal(id);
+  renderTerminalTabs();
+  terminal.focus();
+}
+
+function switchTerminal(id) {
+  activeTerminalId = id;
+  for (const [tid, inst] of terminalInstances) {
+    inst.element.classList.toggle("active", tid === id);
+  }
+  renderTerminalTabs();
+  const inst = terminalInstances.get(id);
+  if (inst) {
+    requestAnimationFrame(() => {
+      inst.fitAddon.fit();
+      inst.terminal.focus();
+    });
+  }
+}
+
+async function closeTerminal(id) {
+  const inst = terminalInstances.get(id);
+  if (!inst) return;
+
+  inst.listener();
+  inst.exitListener();
+  inst.terminal.dispose();
+  inst.element.remove();
+  terminalInstances.delete(id);
+  invoke("close_terminal", { id }).catch(() => {});
+
+  if (terminalInstances.size === 0) {
+    // Auto-close panel
+    terminalOpen = false;
+    activeTerminalId = null;
+    els.terminalPanel.style.display = "none";
+    els.terminalResizeHandle.style.display = "none";
+  } else if (activeTerminalId === id) {
+    // Switch to the last remaining terminal
+    const nextId = [...terminalInstances.keys()].pop();
+    switchTerminal(nextId);
+  }
+  renderTerminalTabs();
+}
+
+function renderTerminalTabs() {
+  els.terminalTabs.innerHTML = "";
+  for (const [id, inst] of terminalInstances) {
+    const tab = document.createElement("div");
+    tab.className = `terminal-tab${id === activeTerminalId ? " active" : ""}`;
+
+    const label = document.createElement("span");
+    label.className = "terminal-tab-label";
+    label.textContent = inst.name;
+    label.addEventListener("click", (e) => {
+      e.stopPropagation();
+      switchTerminal(id);
+    });
+    label.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      renameTerminal(id, label);
+    });
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "terminal-tab-close";
+    closeBtn.textContent = "\u00d7";
+    closeBtn.title = "Close terminal";
+    closeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeTerminal(id);
+    });
+
+    tab.appendChild(label);
+    tab.appendChild(closeBtn);
+    tab.addEventListener("click", () => switchTerminal(id));
+    els.terminalTabs.appendChild(tab);
+  }
+}
+
+function renameTerminal(id, labelEl) {
+  labelEl.contentEditable = "true";
+  labelEl.focus();
+  // Select all text
+  const range = document.createRange();
+  range.selectNodeContents(labelEl);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+
+  function finish() {
+    labelEl.contentEditable = "false";
+    const newName = labelEl.textContent.trim();
+    if (newName) {
+      const inst = terminalInstances.get(id);
+      if (inst) inst.name = newName;
+    } else {
+      // Revert to current name
+      const inst = terminalInstances.get(id);
+      if (inst) labelEl.textContent = inst.name;
+    }
+    labelEl.removeEventListener("blur", finish);
+    labelEl.removeEventListener("keydown", onKey);
+  }
+
+  function onKey(e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      labelEl.blur();
+    } else if (e.key === "Escape") {
+      const inst = terminalInstances.get(id);
+      if (inst) labelEl.textContent = inst.name;
+      labelEl.blur();
+    }
+  }
+
+  labelEl.addEventListener("blur", finish);
+  labelEl.addEventListener("keydown", onKey);
+}
+
+function setupTerminalResizeHandle() {
+  const handle = els.terminalResizeHandle;
+  if (!handle) return;
+
+  let startY, startHeight;
+
+  handle.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    startY = e.clientY;
+    startHeight = els.terminalPanel.offsetHeight;
+    handle.classList.add("active");
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  });
+
+  function onMouseMove(e) {
+    const diff = startY - e.clientY; // dragging up increases height
+    const newHeight = Math.min(800, Math.max(100, startHeight + diff));
+    els.terminalPanel.style.height = `${newHeight}px`;
+    terminalPanelHeight = newHeight;
+    // Refit active terminal
+    if (activeTerminalId) {
+      const inst = terminalInstances.get(activeTerminalId);
+      if (inst) inst.fitAddon.fit();
+    }
+  }
+
+  function onMouseUp() {
+    handle.classList.remove("active");
+    localStorage.setItem("md-terminal-height", terminalPanelHeight.toString());
+    document.removeEventListener("mousemove", onMouseMove);
+    document.removeEventListener("mouseup", onMouseUp);
+    // Send final resize to backend
+    if (activeTerminalId) {
+      const inst = terminalInstances.get(activeTerminalId);
+      if (inst) {
+        inst.fitAddon.fit();
+        invoke("resize_terminal", {
+          id: activeTerminalId,
+          rows: inst.terminal.rows,
+          cols: inst.terminal.cols,
+        }).catch(() => {});
+      }
+    }
+  }
+}
+
+// ResizeObserver to refit terminal when content-area resizes
+new ResizeObserver(() => {
+  if (terminalOpen && activeTerminalId) {
+    const inst = terminalInstances.get(activeTerminalId);
+    if (inst) {
+      inst.fitAddon.fit();
+      invoke("resize_terminal", {
+        id: activeTerminalId,
+        rows: inst.terminal.rows,
+        cols: inst.terminal.cols,
+      }).catch(() => {});
+    }
+  }
+}).observe(document.getElementById("content-area"));
+
+// ===== Find in Document (Read Mode) =====
+function openFindBar() {
+  if (editorFindOpen) closeEditorFindBar();
+  findBarOpen = true;
+  els.findBar.style.display = "flex";
+  els.findInput.focus();
+  els.findInput.select();
+}
+
+function closeFindBar() {
+  findBarOpen = false;
+  els.findBar.style.display = "none";
+  els.findInput.value = "";
+  els.findCount.textContent = "";
+  clearFindHighlights();
+  findMatches = [];
+  findCurrentIndex = -1;
+}
+
+function findInDocument(query) {
+  clearFindHighlights();
+  findMatches = [];
+  findCurrentIndex = -1;
+  if (!query) { els.findCount.textContent = ""; return; }
+
+  const lowerQuery = query.toLowerCase();
+  const walker = document.createTreeWalker(els.content, NodeFilter.SHOW_TEXT, null);
+  const textNodes = [];
+  while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+  for (const node of textNodes) {
+    const text = node.textContent;
+    const lowerText = text.toLowerCase();
+    let startPos = 0;
+    const segments = [];
+
+    while (true) {
+      const idx = lowerText.indexOf(lowerQuery, startPos);
+      if (idx === -1) break;
+      segments.push({ start: idx, end: idx + query.length });
+      startPos = idx + 1;
+    }
+
+    if (segments.length === 0) continue;
+
+    // Split this text node and wrap matches in <mark>
+    const parent = node.parentNode;
+    const frag = document.createDocumentFragment();
+    let lastEnd = 0;
+    for (const seg of segments) {
+      if (seg.start > lastEnd) {
+        frag.appendChild(document.createTextNode(text.slice(lastEnd, seg.start)));
+      }
+      const mark = document.createElement("mark");
+      mark.className = "find-highlight";
+      mark.textContent = text.slice(seg.start, seg.end);
+      frag.appendChild(mark);
+      findMatches.push(mark);
+      lastEnd = seg.end;
+    }
+    if (lastEnd < text.length) {
+      frag.appendChild(document.createTextNode(text.slice(lastEnd)));
+    }
+    parent.replaceChild(frag, node);
+  }
+
+  if (findMatches.length > 0) {
+    findCurrentIndex = 0;
+    findMatches[0].classList.add("find-current");
+    findMatches[0].scrollIntoView({ block: "center", behavior: "smooth" });
+    els.findCount.textContent = `1 of ${findMatches.length}`;
+  } else {
+    els.findCount.textContent = "No results";
+  }
+}
+
+function clearFindHighlights() {
+  const marks = els.content.querySelectorAll("mark.find-highlight");
+  marks.forEach((mark) => {
+    const parent = mark.parentNode;
+    parent.replaceChild(document.createTextNode(mark.textContent), mark);
+    parent.normalize();
+  });
+}
+
+function findNext() {
+  if (findMatches.length === 0) return;
+  findMatches[findCurrentIndex]?.classList.remove("find-current");
+  findCurrentIndex = (findCurrentIndex + 1) % findMatches.length;
+  findMatches[findCurrentIndex].classList.add("find-current");
+  findMatches[findCurrentIndex].scrollIntoView({ block: "center", behavior: "smooth" });
+  els.findCount.textContent = `${findCurrentIndex + 1} of ${findMatches.length}`;
+}
+
+function findPrev() {
+  if (findMatches.length === 0) return;
+  findMatches[findCurrentIndex]?.classList.remove("find-current");
+  findCurrentIndex = (findCurrentIndex - 1 + findMatches.length) % findMatches.length;
+  findMatches[findCurrentIndex].classList.add("find-current");
+  findMatches[findCurrentIndex].scrollIntoView({ block: "center", behavior: "smooth" });
+  els.findCount.textContent = `${findCurrentIndex + 1} of ${findMatches.length}`;
+}
+
+// ===== Find & Replace in Editor (Edit Mode) =====
+function openEditorFindBar(showReplace) {
+  if (findBarOpen) closeFindBar();
+  editorFindOpen = true;
+  els.editorFindBar.style.display = "flex";
+  els.editorReplaceRow.style.display = showReplace ? "flex" : "none";
+  els.editorFindInput.focus();
+  els.editorFindInput.select();
+}
+
+function closeEditorFindBar() {
+  editorFindOpen = false;
+  els.editorFindBar.style.display = "none";
+  els.editorFindInput.value = "";
+  els.editorReplaceInput.value = "";
+  els.editorFindCount.textContent = "";
+  els.editorReplaceRow.style.display = "none";
+  editorFindMatches = [];
+  editorFindCurrentIndex = -1;
+}
+
+function findInEditor(query) {
+  editorFindMatches = [];
+  editorFindCurrentIndex = -1;
+  if (!query) { els.editorFindCount.textContent = ""; return; }
+
+  const text = els.editor.value;
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  let startPos = 0;
+
+  while (true) {
+    const idx = lowerText.indexOf(lowerQuery, startPos);
+    if (idx === -1) break;
+    editorFindMatches.push({ start: idx, end: idx + query.length });
+    startPos = idx + 1;
+  }
+
+  if (editorFindMatches.length > 0) {
+    editorFindCurrentIndex = 0;
+    const match = editorFindMatches[0];
+    els.editor.setSelectionRange(match.start, match.end);
+    els.editor.focus();
+    scrollEditorToSelection();
+    els.editorFindCount.textContent = `1 of ${editorFindMatches.length}`;
+  } else {
+    els.editorFindCount.textContent = "No results";
+  }
+}
+
+function scrollEditorToSelection() {
+  // Calculate approximate scroll position based on line number
+  const text = els.editor.value;
+  const selStart = els.editor.selectionStart;
+  const linesBefore = text.substring(0, selStart).split("\n").length;
+  const lineHeight = 14 * 1.6; // matches editor font-size * line-height
+  const targetScroll = (linesBefore - 1) * lineHeight - els.editor.clientHeight / 2;
+  els.editor.scrollTop = Math.max(0, targetScroll);
+  els.editorLineNumbers.scrollTop = els.editor.scrollTop;
+}
+
+function editorFindNext() {
+  if (editorFindMatches.length === 0) return;
+  editorFindCurrentIndex = (editorFindCurrentIndex + 1) % editorFindMatches.length;
+  const match = editorFindMatches[editorFindCurrentIndex];
+  els.editor.setSelectionRange(match.start, match.end);
+  els.editor.focus();
+  scrollEditorToSelection();
+  els.editorFindCount.textContent = `${editorFindCurrentIndex + 1} of ${editorFindMatches.length}`;
+}
+
+function editorFindPrev() {
+  if (editorFindMatches.length === 0) return;
+  editorFindCurrentIndex = (editorFindCurrentIndex - 1 + editorFindMatches.length) % editorFindMatches.length;
+  const match = editorFindMatches[editorFindCurrentIndex];
+  els.editor.setSelectionRange(match.start, match.end);
+  els.editor.focus();
+  scrollEditorToSelection();
+  els.editorFindCount.textContent = `${editorFindCurrentIndex + 1} of ${editorFindMatches.length}`;
+}
+
+function editorReplace() {
+  if (editorFindMatches.length === 0 || editorFindCurrentIndex < 0) return;
+  const match = editorFindMatches[editorFindCurrentIndex];
+  const replacement = els.editorReplaceInput.value;
+  const text = els.editor.value;
+  els.editor.value = text.substring(0, match.start) + replacement + text.substring(match.end);
+  updateEditorLineNumbers();
+  // Re-run search to update positions
+  findInEditor(els.editorFindInput.value);
+}
+
+function editorReplaceAll() {
+  if (editorFindMatches.length === 0) return;
+  const replacement = els.editorReplaceInput.value;
+  const text = els.editor.value;
+  // Replace in reverse to preserve positions
+  let result = text;
+  for (let i = editorFindMatches.length - 1; i >= 0; i--) {
+    const m = editorFindMatches[i];
+    result = result.substring(0, m.start) + replacement + result.substring(m.end);
+  }
+  els.editor.value = result;
+  updateEditorLineNumbers();
+  findInEditor(els.editorFindInput.value);
+}
+
+// ===== Search in Files =====
+function toggleSearchInFiles() {
+  searchInFilesMode = !searchInFilesMode;
+  els.btnSearchContents.classList.toggle("active", searchInFilesMode);
+  els.filterInput.placeholder = searchInFilesMode ? "Search in files..." : "Filter files...";
+  els.filterInput.value = "";
+  filterText = "";
+  searchInFilesResults = [];
+  renderFileTree();
+  els.filterInput.focus();
+}
+
+async function performSearchInFiles(query) {
+  if (!currentFolderPath || !query) return;
+  try {
+    searchInFilesResults = await invoke("search_in_files", {
+      folder: currentFolderPath,
+      query,
+      caseSensitive: false,
+    });
+    renderSearchResults(query);
+  } catch (err) {
+    console.error("Search in files failed:", err);
+  }
+}
+
+function renderSearchResults(query) {
+  els.fileTree.innerHTML = "";
+  if (searchInFilesResults.length === 0) {
+    els.fileTree.innerHTML = `<div class="search-result-count">No results found</div>`;
+    return;
+  }
+
+  // Group by file
+  const groups = new Map();
+  for (const match of searchInFilesResults) {
+    if (!groups.has(match.filePath)) {
+      groups.set(match.filePath, { fileName: match.fileName, matches: [] });
+    }
+    groups.get(match.filePath).matches.push(match);
+  }
+
+  const frag = document.createDocumentFragment();
+
+  // Total count
+  const countEl = document.createElement("div");
+  countEl.className = "search-result-count";
+  const fileCount = groups.size;
+  const matchCount = searchInFilesResults.length;
+  countEl.textContent = `${matchCount} result${matchCount !== 1 ? "s" : ""} in ${fileCount} file${fileCount !== 1 ? "s" : ""}`;
+  frag.appendChild(countEl);
+
+  for (const [filePath, group] of groups) {
+    const groupEl = document.createElement("div");
+    groupEl.className = "search-result-group";
+
+    // File header
+    const fileEl = document.createElement("div");
+    fileEl.className = "search-result-file";
+    fileEl.textContent = group.fileName;
+    fileEl.title = filePath;
+    fileEl.addEventListener("click", () => openFile(filePath));
+    groupEl.appendChild(fileEl);
+
+    // Match lines (show max 10 per file)
+    const displayMatches = group.matches.slice(0, 10);
+    for (const match of displayMatches) {
+      const lineEl = document.createElement("div");
+      lineEl.className = "search-result-line";
+
+      const lineNum = document.createElement("span");
+      lineNum.className = "search-result-linenum";
+      lineNum.textContent = match.lineNumber;
+
+      const textEl = document.createElement("span");
+      textEl.className = "search-result-text";
+      // Highlight the query in the line content
+      const line = match.lineContent.trim();
+      const lowerLine = line.toLowerCase();
+      const lowerQuery = query.toLowerCase();
+      let html = "";
+      let pos = 0;
+      let idx;
+      while ((idx = lowerLine.indexOf(lowerQuery, pos)) !== -1) {
+        html += escapeHtml(line.slice(pos, idx));
+        html += `<mark>${escapeHtml(line.slice(idx, idx + query.length))}</mark>`;
+        pos = idx + query.length;
+      }
+      html += escapeHtml(line.slice(pos));
+      textEl.innerHTML = html;
+
+      lineEl.appendChild(lineNum);
+      lineEl.appendChild(textEl);
+      lineEl.addEventListener("click", () => {
+        openFile(filePath).then(() => {
+          // Try to scroll to the approximate location
+          requestAnimationFrame(() => {
+            // Use a rough heuristic: scroll to estimated position in the content
+            const totalHeight = els.contentScroll.scrollHeight;
+            // We don't know exact line count, but line number is a rough proxy
+            const lineEst = match.lineNumber;
+            // Estimate: assume ~20px per line of rendered content is rough
+            els.contentScroll.scrollTop = Math.max(0, lineEst * 20 - els.contentScroll.clientHeight / 2);
+          });
+        });
+      });
+
+      groupEl.appendChild(lineEl);
+    }
+    if (group.matches.length > 10) {
+      const moreEl = document.createElement("div");
+      moreEl.className = "search-result-line";
+      moreEl.style.color = "var(--text-muted)";
+      moreEl.style.fontStyle = "italic";
+      moreEl.textContent = `... and ${group.matches.length - 10} more`;
+      groupEl.appendChild(moreEl);
+    }
+
+    frag.appendChild(groupEl);
+  }
+
+  els.fileTree.appendChild(frag);
 }
 
 // ===== Helpers =====

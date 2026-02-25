@@ -238,6 +238,114 @@ pub fn open_path(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchMatch {
+    pub file_path: String,
+    pub file_name: String,
+    pub line_number: usize,
+    pub line_content: String,
+    pub match_start: usize,
+    pub match_end: usize,
+}
+
+#[tauri::command]
+pub fn search_in_files(
+    folder: String,
+    query: String,
+    case_sensitive: bool,
+) -> Result<Vec<SearchMatch>, String> {
+    if query.is_empty() {
+        return Ok(vec![]);
+    }
+    let folder_path = Path::new(&folder);
+    if !folder_path.is_dir() {
+        return Err(format!("Not a directory: {}", folder));
+    }
+    let mut results = Vec::new();
+    search_directory(folder_path, &query, case_sensitive, &mut results, 0);
+    // Limit to 500 matches to avoid overwhelming the UI
+    results.truncate(500);
+    Ok(results)
+}
+
+fn search_directory(
+    dir: &Path,
+    query: &str,
+    case_sensitive: bool,
+    results: &mut Vec<SearchMatch>,
+    depth: usize,
+) {
+    if depth > 20 || results.len() >= 500 {
+        return;
+    }
+
+    let read_dir = match fs::read_dir(dir) {
+        Ok(rd) => rd,
+        Err(_) => return,
+    };
+
+    for entry in read_dir {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+
+        if name.starts_with('.') {
+            continue;
+        }
+
+        if path.is_dir() {
+            if matches!(
+                name.as_str(),
+                "node_modules" | "target" | ".git" | "__pycache__" | "dist" | "build" | ".next" | ".cache"
+            ) {
+                continue;
+            }
+            search_directory(&path, query, case_sensitive, results, depth + 1);
+        } else if is_markdown_file(&name) {
+            if results.len() >= 500 {
+                return;
+            }
+            if let Ok(content) = fs::read_to_string(&path) {
+                let query_lower = if case_sensitive {
+                    String::new()
+                } else {
+                    query.to_lowercase()
+                };
+                for (line_idx, line) in content.lines().enumerate() {
+                    let hay = if case_sensitive {
+                        line.to_string()
+                    } else {
+                        line.to_lowercase()
+                    };
+                    let needle = if case_sensitive { query } else { &query_lower };
+                    let mut start = 0;
+                    while let Some(pos) = hay[start..].find(needle) {
+                        let match_start = start + pos;
+                        let match_end = match_start + query.len();
+                        results.push(SearchMatch {
+                            file_path: path.to_string_lossy().to_string(),
+                            file_name: name.clone(),
+                            line_number: line_idx + 1,
+                            line_content: line.to_string(),
+                            match_start,
+                            match_end,
+                        });
+                        if results.len() >= 500 {
+                            return;
+                        }
+                        start = match_start + 1;
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub fn rewrite_image_paths(html: &str, base_dir: &str) -> String {
     // Match <img ... src="value" ...> — capture the src value
     let re = Regex::new(r#"(<img\s[^>]*src=")([^"]+)("[^>]*>)"#).unwrap();

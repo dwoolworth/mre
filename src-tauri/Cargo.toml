@@ -1,6 +1,6 @@
 [package]
 name = "mre"
-version = "0.1.8"
+version = "0.1.10"
 description = "Markdown Read & Edit — a lightweight GitHub-style markdown editor"
 authors = ["derrick"]
 edition = "2021"
@@ -32,6 +32,7 @@ resvg = "0.45"
 usvg = "0.45"
 tiny-skia = "0.11"
 fontdb = "0.23"
+portable-pty = "0.8"
 
 [profile.release]
 lto = true

@@ -914,3 +914,180 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
   display: inline-block; width: 6px; height: 6px; border-radius: 50%;
   background: #3fb950; margin-left: 4px; vertical-align: middle;
 }
+
+/* ===== Terminal Panel ===== */
+#terminal-resize-handle {
+  height: 4px; cursor: row-resize; background: transparent;
+  flex-shrink: 0; transition: background-color 0.15s;
+}
+#terminal-resize-handle:hover, #terminal-resize-handle.active {
+  background: var(--link-color);
+}
+
+#terminal-panel {
+  display: flex; flex-direction: column;
+  border-top: 1px solid var(--border-color);
+  min-height: 100px; flex-shrink: 0;
+  background: var(--bg-primary);
+}
+
+#terminal-tab-bar {
+  display: flex; align-items: center; height: 32px;
+  background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);
+  padding: 0 4px; gap: 2px; flex-shrink: 0;
+  justify-content: flex-end;
+}
+
+#terminal-tabs {
+  display: flex; align-items: center; gap: 2px;
+  overflow-x: auto; flex: 1; justify-content: flex-end;
+}
+
+.terminal-tab {
+  display: flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: 4px;
+  background: transparent; border: none;
+  color: var(--text-secondary); font-size: 12px; font-family: inherit;
+  cursor: pointer; white-space: nowrap; transition: background-color 0.1s;
+  max-width: 160px;
+}
+.terminal-tab:hover { background: var(--hover-bg); }
+.terminal-tab.active {
+  background: var(--active-bg); color: var(--text-primary);
+}
+
+.terminal-tab-label {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  outline: none; min-width: 20px;
+}
+.terminal-tab-label[contenteditable="true"] {
+  background: var(--bg-primary); border-radius: 3px; padding: 0 4px;
+  cursor: text; min-width: 40px;
+}
+
+.terminal-tab-close {
+  display: flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 3px;
+  border: none; background: transparent; color: var(--text-muted);
+  cursor: pointer; font-size: 12px; line-height: 1; padding: 0;
+  opacity: 0; transition: opacity 0.1s, background-color 0.1s;
+}
+.terminal-tab:hover .terminal-tab-close,
+.terminal-tab.active .terminal-tab-close { opacity: 1; }
+.terminal-tab-close:hover { background: var(--hover-bg); color: var(--text-primary); }
+
+.terminal-tab-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 4px;
+  border: none; background: transparent; color: var(--text-secondary);
+  cursor: pointer; font-size: 16px; font-weight: 400; line-height: 1;
+  transition: background-color 0.1s;
+}
+.terminal-tab-btn:hover { background: var(--hover-bg); color: var(--text-primary); }
+
+#terminal-containers {
+  flex: 1; position: relative; overflow: hidden;
+}
+
+.terminal-instance {
+  position: absolute; inset: 0; display: none;
+  padding: 4px;
+}
+.terminal-instance.active { display: block; }
+
+/* ===== Find Bar (Read Mode) ===== */
+#find-bar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px; background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color); flex-shrink: 0;
+}
+#find-input {
+  flex: 1; border: 1px solid var(--border-color); border-radius: 4px;
+  background: var(--bg-primary); color: var(--text-primary);
+  font-size: 13px; padding: 4px 8px; outline: none; font-family: inherit;
+  min-width: 0;
+}
+#find-input:focus { border-color: var(--seg-active-bg); }
+#find-input::placeholder { color: var(--text-muted); }
+#find-count {
+  font-size: 12px; color: var(--text-secondary); white-space: nowrap;
+  font-variant-numeric: tabular-nums; min-width: 48px; text-align: center;
+}
+.find-btn {
+  width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 4px; background: transparent;
+  color: var(--text-secondary); cursor: pointer; font-size: 11px;
+  transition: background-color 0.1s, color 0.1s; flex-shrink: 0;
+}
+.find-btn:hover { background: var(--hover-bg); color: var(--text-primary); }
+.find-btn-text {
+  width: auto; padding: 0 8px; font-size: 12px; font-weight: 500;
+}
+
+/* ===== Editor Find & Replace Bar ===== */
+#editor-find-bar {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 6px 12px; background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color); flex-shrink: 0;
+}
+.editor-find-row {
+  display: flex; align-items: center; gap: 6px;
+}
+#editor-find-input, #editor-replace-input {
+  flex: 1; border: 1px solid var(--border-color); border-radius: 4px;
+  background: var(--bg-primary); color: var(--text-primary);
+  font-size: 13px; padding: 4px 8px; outline: none; font-family: inherit;
+  min-width: 0;
+}
+#editor-find-input:focus, #editor-replace-input:focus { border-color: var(--seg-active-bg); }
+#editor-find-input::placeholder, #editor-replace-input::placeholder { color: var(--text-muted); }
+#editor-find-count {
+  font-size: 12px; color: var(--text-secondary); white-space: nowrap;
+  font-variant-numeric: tabular-nums; min-width: 48px; text-align: center;
+}
+
+/* ===== Find Highlights ===== */
+mark.find-highlight {
+  background: rgba(255, 200, 0, 0.4); border-radius: 2px;
+  color: inherit; padding: 0;
+}
+mark.find-highlight.find-current {
+  background: rgba(255, 150, 0, 0.7);
+  outline: 2px solid orange;
+}
+[data-theme$="-light"] mark.find-highlight { background: rgba(255, 200, 0, 0.5); }
+[data-theme$="-light"] mark.find-highlight.find-current { background: rgba(255, 150, 0, 0.8); }
+
+/* ===== Sidebar Search Results ===== */
+.search-result-group { padding: 4px 0; }
+.search-result-file {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px; font-size: 13px; font-weight: 600;
+  color: var(--text-primary); cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.search-result-file:hover { background: var(--hover-bg); }
+.search-result-line {
+  display: flex; align-items: baseline; gap: 6px;
+  padding: 3px 12px 3px 28px; font-size: 12px;
+  color: var(--text-secondary); cursor: pointer;
+  line-height: 1.4;
+}
+.search-result-line:hover { background: var(--hover-bg); }
+.search-result-linenum {
+  font-size: 11px; color: var(--text-muted); flex-shrink: 0;
+  font-variant-numeric: tabular-nums; min-width: 24px; text-align: right;
+}
+.search-result-text {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.search-result-text mark {
+  background: rgba(255, 200, 0, 0.4); color: inherit; border-radius: 2px; padding: 0;
+}
+.search-result-count {
+  font-size: 11px; color: var(--text-muted); padding: 6px 12px;
+}
+#btn-search-contents.active {
+  background: var(--seg-active-bg); color: var(--seg-active-text);
+  border-color: var(--seg-active-bg);
+}
