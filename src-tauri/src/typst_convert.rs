@@ -243,7 +243,9 @@ fn render_node<'a>(
             out.push_str("#hrule()\n\n");
         }
         NodeValue::SoftBreak => {
-            out.push(' ');
+            // Match the HTML renderer's `hardbreaks = true` setting so a single
+            // newline becomes a real line break in the PDF too.
+            out.push_str("\\\n");
         }
         NodeValue::LineBreak => {
             out.push_str("\\\n");
@@ -258,10 +260,11 @@ fn render_node<'a>(
             }
         }
         NodeValue::HtmlBlock(html) => {
-            // Try to handle simple <br> tags
-            let literal = html.literal.trim();
+            let literal = html.literal.trim().to_lowercase();
             if literal == "<br>" || literal == "<br/>" || literal == "<br />" {
                 out.push_str("\\\n");
+            } else if literal.contains("page-break") {
+                out.push_str("#pagebreak()\n\n");
             }
             // Otherwise skip HTML blocks
         }

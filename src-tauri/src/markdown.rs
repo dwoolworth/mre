@@ -27,6 +27,10 @@ pub fn render_markdown(input: &str) -> String {
 
     // Render options
     options.render.unsafe_ = true; // Allow raw HTML in markdown
+    // Treat single newlines as hard line breaks. CommonMark would merge
+    // consecutive non-blank lines into one paragraph, but users editing
+    // documents in this app expect WYSIWYG-style line breaks.
+    options.render.hardbreaks = true;
 
     markdown_to_html(&input, &options)
 }

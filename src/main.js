@@ -1122,6 +1122,85 @@ function renderFileEntry(entry, container, depth) {
   container.appendChild(item);
 
   item.addEventListener("click", () => openFile(entry.path));
+  item.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    showFileContextMenu(e.clientX, e.clientY, entry.path);
+  });
+}
+
+function getFileManagerLabel() {
+  const ua = navigator.userAgent;
+  if (/Mac|iPhone|iPad|iPod/.test(ua)) return "Finder";
+  if (/Windows/.test(ua)) return "Explorer";
+  return "File Manager";
+}
+
+function parentDirOf(filePath) {
+  // Strip the trailing filename. Handles both "/" and "\" so this works on
+  // Windows paths reported by the backend.
+  const idx = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"));
+  if (idx <= 0) return filePath;
+  return filePath.slice(0, idx);
+}
+
+let activeContextMenu = null;
+
+function dismissContextMenu() {
+  if (activeContextMenu) {
+    activeContextMenu.remove();
+    activeContextMenu = null;
+    document.removeEventListener("click", dismissContextMenu, true);
+    document.removeEventListener("contextmenu", dismissContextMenu, true);
+    document.removeEventListener("keydown", contextMenuKeyHandler, true);
+    window.removeEventListener("blur", dismissContextMenu);
+    window.removeEventListener("resize", dismissContextMenu);
+  }
+}
+
+function contextMenuKeyHandler(e) {
+  if (e.key === "Escape") dismissContextMenu();
+}
+
+function showFileContextMenu(x, y, filePath) {
+  dismissContextMenu();
+  const menu = document.createElement("div");
+  menu.className = "context-menu";
+  const label = `Open parent folder in ${getFileManagerLabel()}`;
+  const opener = document.createElement("div");
+  opener.className = "context-menu-item";
+  opener.textContent = label;
+  opener.addEventListener("click", async () => {
+    dismissContextMenu();
+    try {
+      await invoke("open_path", { path: parentDirOf(filePath) });
+    } catch (err) {
+      console.error("Failed to open parent folder:", err);
+    }
+  });
+  menu.appendChild(opener);
+
+  // Place off-screen first to measure, then clamp to viewport.
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+  menu.style.visibility = "hidden";
+  document.body.appendChild(menu);
+  const rect = menu.getBoundingClientRect();
+  const px = Math.min(x, window.innerWidth - rect.width - 4);
+  const py = Math.min(y, window.innerHeight - rect.height - 4);
+  menu.style.left = `${Math.max(0, px)}px`;
+  menu.style.top = `${Math.max(0, py)}px`;
+  menu.style.visibility = "";
+
+  activeContextMenu = menu;
+  // Defer wiring dismiss listeners so the originating event doesn't close it.
+  setTimeout(() => {
+    document.addEventListener("click", dismissContextMenu, true);
+    document.addEventListener("contextmenu", dismissContextMenu, true);
+    document.addEventListener("keydown", contextMenuKeyHandler, true);
+    window.addEventListener("blur", dismissContextMenu);
+    window.addEventListener("resize", dismissContextMenu);
+  }, 0);
 }
 
 function entryMatchesFilter(entry, text) {
